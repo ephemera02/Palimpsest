@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Palimpsest</title>
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#0a0b10;--bg1:#0f1117;--bg2:#161822;--bg3:#1c1f2e;--bg4:#232738;--border:#2a2e42;--fg:#e2e4ea;--fg2:#8b8fa3;--fg3:#5c6078;--accent:#4f8ff7;--accent2:#3a7ae8;--green:#34d399;--green2:#065f46;--red:#f87171;--red2:#7f1d1d;--yellow:#fbbf24;--yellow2:#78350f;--purple:#a78bfa;--purple2:#4c1d95;--orange:#fb923c;--orange2:#7c2d12;--mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;overflow:hidden;height:100vh}::selection{background:var(--accent);color:#fff}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}input,select,textarea,button{font-family:inherit;font-size:inherit}
+.app{display:flex;height:100vh}.sidebar{width:220px;min-width:220px;background:var(--bg1);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}.sidebar-brand .lf{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}.sidebar-brand h1{font-size:17px;font-weight:600;letter-spacing:-.3px}.sidebar-brand span{font-size:11px;color:var(--fg3);margin-left:auto}
+.sidebar-nav{padding:10px 8px;flex:1;overflow-y:auto}.ns{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--fg3);padding:14px 12px 6px;font-weight:600}.ni{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:6px;cursor:pointer;color:var(--fg2);transition:all .15s;font-weight:400;font-size:13.5px;margin-bottom:1px}.ni:hover{background:var(--bg2);color:var(--fg)}.ni.active{background:var(--bg3);color:var(--fg);font-weight:500}.ni .ic{width:18px;text-align:center;font-size:15px}.ni .badge{margin-left:auto;background:var(--bg4);color:var(--fg2);font-size:11px;padding:1px 7px;border-radius:8px;font-family:var(--mono)}
+.sidebar-footer{padding:14px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--fg3);line-height:1.8}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}.main-content{flex:1;overflow-y:auto;padding:28px 36px}
+.ph{margin-bottom:20px}.ph h2{font-size:22px;font-weight:600;letter-spacing:-.5px}.ph p{color:var(--fg2);font-size:13px;margin-top:2px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:16px}.card h3{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}.dash-stat{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}.dash-stat .num{font-size:24px;font-weight:700;color:var(--accent);font-family:var(--mono)}.dash-stat .lbl{font-size:10px;color:var(--fg2);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.fr{display:flex;gap:12px;margin-bottom:10px}.fg{display:flex;flex-direction:column;gap:4px;flex:1}.fg label{font-size:12px;color:var(--fg2);font-weight:500}.fi{background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--fg);outline:none;transition:border .15s;font-family:var(--mono);font-size:13px}.fi:focus{border-color:var(--accent)}.fi::placeholder{color:var(--fg3)}textarea.fi{resize:vertical;min-height:70px;font-family:var(--sans)}select.fi{cursor:pointer}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-weight:500;font-size:13px;transition:all .15s}.bp{background:var(--accent);color:#fff}.bp:hover{background:var(--accent2)}.bd{background:var(--red2);color:var(--red)}.bg{background:transparent;color:var(--fg2);border:1px solid var(--border)}.bg:hover{background:var(--bg3);color:var(--fg)}.bs{background:var(--green2);color:var(--green)}.bpu{background:var(--purple2);color:var(--purple)}.btn-sm{padding:5px 10px;font-size:12px}.br{display:flex;gap:8px;margin-top:12px}
+.mt{width:100%;border-collapse:collapse}.mt th{text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--fg3);border-bottom:1px solid var(--border);font-weight:600;position:sticky;top:0;background:var(--bg2);z-index:1}.mt td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:top}.mt tr:hover td{background:var(--bg3)}.mt tr{cursor:pointer}
+.tag{display:inline-flex;background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500;margin:1px}
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:48px;text-align:center;color:var(--fg3);cursor:pointer;transition:all .2s}.drop-zone:hover{border-color:var(--accent);color:var(--fg2)}.drop-zone.dragover{border-color:var(--green);background:rgba(52,211,153,.05)}
+.suspect-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}.suspect-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px;cursor:pointer;transition:all .15s}.suspect-card:hover{border-color:var(--accent);transform:translateY(-1px)}.suspect-card h4{font-size:16px;font-weight:600;margin-bottom:6px}.suspect-card .aliases{color:var(--fg2);font-size:12px;margin-bottom:8px}.suspect-card .meta{display:flex;gap:16px;font-size:12px;color:var(--fg3)}.suspect-card .meta .num{color:var(--fg);font-family:var(--mono);font-weight:500}
+.threat-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;text-transform:uppercase}.threat-high{background:var(--red2);color:var(--red)}.threat-medium{background:var(--orange2);color:var(--orange)}.threat-low{background:var(--yellow2);color:var(--yellow)}.threat-unknown{background:var(--bg4);color:var(--fg3)}
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}.mode-btn{flex:1;padding:12px 16px;background:var(--bg1);color:var(--fg2);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;text-align:center}.mode-btn.active{background:var(--accent);color:#fff}.mode-btn:hover:not(.active){background:var(--bg3)}
+.meta-field{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}.meta-field:hover{background:var(--bg3)}.meta-field .mf-key{color:var(--fg2);min-width:180px}.meta-field .mf-val{color:var(--fg);font-family:var(--mono);word-break:break-all;text-align:right;flex:1;margin-left:12px}.meta-field .mf-explain{font-size:11px;color:var(--fg3);margin-top:2px}
+.strip-warn{background:var(--red2);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--red);margin:8px 0;line-height:1.6}
+.strip-ok{background:var(--green2);border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--green);margin:8px 0}
+.hash-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.hash-item{background:var(--bg3);border-radius:6px;padding:10px 12px}.hash-item .hl{font-size:10px;color:var(--fg3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}.hash-item .hv{font-family:var(--mono);font-size:11px;word-break:break-all;color:var(--fg)}
+.compare-result{text-align:center;padding:12px;font-size:13px;border-radius:8px}.compare-match{background:var(--green2);color:var(--green)}.compare-diff{background:var(--red2);color:var(--red)}.compare-partial{background:var(--yellow2);color:var(--yellow)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border);padding:12px 20px;border-radius:8px;font-size:13px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none}.toast.show{opacity:1}.toast.success{border-color:var(--green);color:var(--green)}.toast.error{border-color:var(--red);color:var(--red)}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}.mo.open{opacity:1;pointer-events:all}.ml{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:560px;max-height:85vh;overflow-y:auto}.ml h3{font-size:18px;margin-bottom:18px}.mc{float:right;background:none;border:none;color:var(--fg3);font-size:20px;cursor:pointer}.mc:hover{color:var(--fg)}
+.page{display:none}.page.active{display:block}
+#mapContainer{height:500px;border-radius:8px;border:1px solid var(--border)}
+.ev-thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--bg4)}
+.preview-img{max-width:100%;max-height:400px;border-radius:8px;margin:12px 0}
+.frame-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.frame-grid img{width:100%;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:border-color .15s}.frame-grid img:hover{border-color:var(--accent)}.frame-grid .frame-ts{font-size:10px;color:var(--fg3);font-family:var(--mono);text-align:center;margin-top:2px}
+.db{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}.db .bar{height:20px;background:var(--accent);border-radius:3px;min-width:4px}.db .dn{min-width:140px;color:var(--fg2);font-family:var(--mono);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.db .dnum{color:var(--fg3);font-family:var(--mono);min-width:40px}
+.tl-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer}.tl-item:hover{background:var(--bg3)}.tl-date{min-width:140px;font-family:var(--mono);font-size:12px;color:var(--fg3)}.tl-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.video-badge{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--purple2);color:var(--purple);font-family:var(--mono)}
+/* Forensic Video Player */
+.vp-container{background:var(--bg1);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:12px 0}
+.vp-viewport{position:relative;overflow:auto;max-height:500px;background:#000;cursor:grab}.vp-viewport:active{cursor:grabbing}
+.vp-viewport video{display:block;transform-origin:0 0;transition:filter .15s}
+.vp-controls{padding:12px 16px;background:var(--bg2);border-top:1px solid var(--border)}
+.vp-row{display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap}.vp-row:last-child{margin-bottom:0}
+.vp-slider-group{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg2);min-width:160px}
+.vp-slider-group label{min-width:70px;text-align:right;font-family:var(--mono)}
+.vp-slider-group input[type=range]{flex:1;accent-color:var(--accent);height:4px;cursor:pointer}
+.vp-slider-group .vp-val{min-width:32px;font-family:var(--mono);color:var(--fg3);font-size:10px}
+.vp-btn{background:var(--bg3);border:1px solid var(--border);color:var(--fg2);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:all .15s}.vp-btn:hover{background:var(--bg4);color:var(--fg)}
+.vp-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.vp-zoom-display{font-family:var(--mono);font-size:12px;color:var(--accent);min-width:40px;text-align:center}
+/* Tooltips */
+[data-tip]{position:relative}[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg4);color:var(--fg);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:12px;white-space:nowrap;z-index:300;pointer-events:none;font-family:var(--sans);font-weight:400;max-width:280px;white-space:normal;line-height:1.4}[data-tip]:hover::before{content:'';position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--bg4);z-index:301}
+/* Tutorial overlay */
+.tut-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:400;display:none}.tut-overlay.active{display:block}
+.tut-highlight{position:absolute;border:2px solid var(--accent);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.6);z-index:401;pointer-events:none;transition:all .4s ease}
+.tut-popup{position:fixed;z-index:402;background:var(--bg2);border:1px solid var(--accent);border-radius:12px;padding:24px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,.5)}.tut-popup h4{font-size:16px;margin-bottom:8px;color:var(--accent)}.tut-popup p{font-size:13px;color:var(--fg2);line-height:1.6;margin-bottom:16px}.tut-popup .tut-step{font-size:11px;color:var(--fg3);font-family:var(--mono);margin-bottom:8px}.tut-popup .tut-btns{display:flex;gap:8px;justify-content:flex-end}.tut-popup .tut-mascot{font-size:28px;margin-bottom:8px}
+/* Help page */
+.help-section{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:16px}.help-section h3{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--accent)}.help-section p,.help-section li{font-size:13px;color:var(--fg2);line-height:1.7}.help-section ul{padding-left:20px;margin:8px 0}.help-section li{margin-bottom:4px}
+.help-link{color:var(--accent);text-decoration:none}.help-link:hover{text-decoration:underline}
+.quote-block{background:var(--bg2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:20px 24px;margin-bottom:20px;position:relative}.quote-block .qt{font-size:14px;color:var(--fg);line-height:1.7;font-style:italic;letter-spacing:.2px}.quote-block .qa{font-size:12px;color:var(--fg3);margin-top:10px;font-style:normal;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="sidebar">
+  <div class="sidebar-brand"><img src="/icon.ico" style="width:28px;height:28px;border-radius:6px" onerror="this.outerHTML='<div class=lf>P</div>'"><h1>Palimpsest</h1><span>v3.1</span></div>
+  <div class="sidebar-nav">
+    <div class="ns">Overview</div>
+    <div class="ni active" data-page="dashboard" data-tip="Your home base. See stats at a glance."><span class="ic">&#9673;</span> Dashboard</div>
+    <div class="ns">Analyze</div>
+    <div class="ni" data-page="analyze" data-tip="Drop a file to see all its hidden metadata."><span class="ic">&#128269;</span> File Analyzer</div>
+    <div class="ni" data-page="batch" data-tip="Process many files at once."><span class="ic">&#128230;</span> Batch Process</div>
+    <div class="ni" data-page="compare" data-tip="Put two files side by side and spot connections."><span class="ic">&#8644;</span> Compare</div>
+    <div class="ni" data-page="duplicates" data-tip="Find exact copies or visually similar files."><span class="ic">&#128203;</span> Duplicates</div>
+    <div class="ns">Evidence</div>
+    <div class="ni" data-page="evidence" data-tip="All your imported files in one searchable list."><span class="ic">&#128206;</span> Evidence Library <span class="badge" id="nEv">0</span></div>
+    <div class="ni" data-page="timeline" data-tip="Evidence sorted by when it was captured."><span class="ic">&#9200;</span> Timeline</div>
+    <div class="ni" data-page="map" data-tip="See where GPS-tagged files were taken on a map."><span class="ic">&#127758;</span> GPS Map</div>
+    <div class="ns">Investigation</div>
+    <div class="ni" data-page="suspects" data-tip="Track people of interest and link evidence to them."><span class="ic">&#9678;</span> Suspects <span class="badge" id="nSus">0</span></div>
+    <div class="ni" data-page="hash_lookup" data-tip="Paste a hash to find matching evidence."><span class="ic">#</span> Hash Lookup</div>
+    <div class="ns">Forensics</div>
+    <div class="ni" data-page="forensics" data-tip="Deep forensic analysis: scene matching, audio, watermarks, encoding chains, screen recording detection."><span class="ic">&#128300;</span> Forensic Suite</div>
+    <div class="ni" data-page="scene_match" data-tip="Find videos filmed in the same location."><span class="ic">&#127968;</span> Scene Matching</div>
+    <div class="ni" data-page="audio_match" data-tip="Find videos with matching audio environments."><span class="ic">&#127925;</span> Audio Matching</div>
+    <div class="ns">Export</div>
+    <div class="ni" data-page="export" data-tip="Export as JSON, PDF, CSV, HTML, or Markdown. Import from other Palimpsest instances."><span class="ic">&#8599;</span> Export &amp; Import</div>
+    <div class="ns">Help</div>
+    <div class="ni" data-page="help"><span class="ic">?</span> Help &amp; Tutorial</div>
+  </div>
+  <div class="sidebar-footer">
+    <a href="https://ephemeradev.net" target="_blank" class="help-link">ephemeradev.net</a><br>
+    <a href="https://github.com/ephemera02" target="_blank" class="help-link">github/ephemera02</a><br>
+    <span>For investigative use only.</span>
+  </div>
+</div>
+<div class="main"><div class="main-content">
+<!-- DASHBOARD -->
+<div class="page active" id="pg-dashboard"><div class="ph"><h2>Dashboard</h2><p>Your investigation at a glance</p></div>
+<div class="quote-block"><div class="qt">"Sorrow be damned and all your plans. Fuck the faithful, fuck the committed, the dedicated, the true believers; fuck all the sure and certain people prepared to maim and kill whoever got in their way; fuck every cause that ended in murder and a child screaming."</div><div class="qa">Iain Banks, Against a Dark Background</div></div>
+<div class="dash-grid" id="dashStats"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div class="card"><h3>Camera Distribution</h3><div id="dashCameras"></div></div><div class="card"><h3>Codec Distribution</h3><div id="dashCodecs"></div></div></div>
+<div class="card"><h3>Recent Evidence</h3><div id="dashRecent"></div></div></div>
+
+<!-- ANALYZE -->
+<div class="page" id="pg-analyze"><div class="ph"><h2>File Analyzer</h2><p>Drop or select a file to extract and analyze all its hidden metadata</p></div>
+<div class="mode-toggle" data-tip="Simple mode explains everything in plain English. Advanced mode shows raw technical data."><button class="mode-btn active" onclick="setMode('simple',this)">Simple Mode</button><button class="mode-btn" onclick="setMode('advanced',this)">Advanced Mode</button></div>
+<div class="card"><div class="drop-zone" id="dropZone" data-tip="Drag a file here, or click to open a file picker. No size limit." onclick="document.getElementById('fileInput').click()"><div style="font-size:36px;margin-bottom:8px">&#128206;</div><div style="font-size:15px;font-weight:500;margin-bottom:4px">Drop file here or click to browse</div><div style="font-size:12px">Videos (MP4, AVI, MOV, MKV, WebM, MTS) and images (JPG, PNG, TIFF, HEIC). No size limit.</div></div>
+<input type="file" id="fileInput" style="display:none" accept="image/*,video/*,.mkv,.avi,.mov,.mts,.m2ts,.ts" onchange="analyzeFile(this.files[0])">
+<div class="fr" style="margin-top:12px"><div class="fg"><label>Link to Suspect</label><select class="fi" id="analyzeSuspect" data-tip="Optionally connect this file to a suspect you've created."><option value="">None</option></select></div><div class="fg"><label>Tags</label><input class="fi" id="analyzeTags" placeholder="comma-separated tags" data-tip="Add your own labels like 'telegram', 'priority', etc."></div></div></div>
+<div id="analysisResult" style="display:none"></div></div>
+
+<!-- BATCH -->
+<div class="page" id="pg-batch"><div class="ph"><h2>Batch Process</h2><p>Analyze many files at once. Great for dumping an entire folder.</p></div>
+<div class="card"><div class="drop-zone" id="batchDrop" onclick="document.getElementById('batchInput').click()"><div style="font-size:36px;margin-bottom:8px">&#128230;</div><div style="font-size:15px;font-weight:500">Drop multiple files or click to browse</div><div style="font-size:12px;margin-top:4px">Select as many as you want. Each one gets fully analyzed.</div></div>
+<input type="file" id="batchInput" style="display:none" multiple accept="image/*,video/*,.mkv,.avi,.mov" onchange="batchAnalyze(this.files)">
+<div class="fr" style="margin-top:12px"><div class="fg"><label>Link all to Suspect</label><select class="fi" id="batchSuspect"><option value="">None</option></select></div></div></div>
+<div id="batchResults"></div></div>
+
+<!-- COMPARE -->
+<div class="page" id="pg-compare"><div class="ph"><h2>Side-by-Side Compare</h2><p>Pick two evidence items and see what they have in common</p></div>
+<div class="fr"><div class="fg"><label>Evidence A</label><select class="fi" id="compareA"></select></div><div class="fg"><label>Evidence B</label><select class="fi" id="compareB"></select></div>
+<div class="fg" style="flex:0;justify-content:flex-end"><label>&nbsp;</label><button class="btn bp" onclick="runCompare()" data-tip="Checks hashes, camera, location, codec, and resolution.">Compare</button></div></div><div id="compareResult"></div></div>
+
+<!-- DUPLICATES -->
+<div class="page" id="pg-duplicates"><div class="ph"><h2>Duplicate Detection</h2><p>Find exact copies (same hash) and near-duplicates (visually similar). Works across videos and images.</p></div>
+<button class="btn bp" onclick="findDuplicates()" style="margin-bottom:16px" data-tip="Scans all evidence for matches. Exact = identical bytes. Near = looks the same but different file.">Scan for Duplicates</button><div id="dupResults"></div></div>
+
+<!-- EVIDENCE -->
+<div class="page" id="pg-evidence"><div class="ph"><h2>Evidence Library</h2><p>Every file you've imported. Click any row to see full details.</p></div>
+<div class="fr" style="margin-bottom:16px"><div class="fg" style="max-width:300px"><input class="fi" id="evSearch" placeholder="Search files, tags, notes..." oninput="loadEvidence()" data-tip="Search by filename, tags, or notes"></div>
+<div class="fg" style="max-width:150px"><select class="fi" id="evType" onchange="loadEvidence()"><option value="">All types</option><option value="image">Images</option><option value="video">Videos</option></select></div>
+<div class="fg" style="max-width:150px"><select class="fi" id="evFilter" onchange="loadEvidence()"><option value="">All</option><option value="gps">Has GPS</option><option value="stripped">Stripped</option></select></div></div>
+<div class="card" style="padding:0;overflow-x:auto"><table class="mt"><thead><tr><th></th><th>File</th><th>Type</th><th>Duration</th><th>Codec</th><th>Date</th><th data-tip="GPS coordinates embedded in file">GPS</th><th data-tip="Metadata stripping detected">Strip</th><th>Suspect</th><th></th></tr></thead>
+<tbody id="evTable"></tbody></table></div><div id="evPagination" style="text-align:center;padding:12px;color:var(--fg3);font-size:12px"></div></div>
+
+<!-- EVIDENCE DETAIL MODAL -->
+<div class="mo" id="evDetailModal"><div class="ml" style="width:760px"><button class="mc" onclick="closeModal('evDetailModal')">&times;</button><div id="evDetailContent"></div></div></div>
+
+<!-- TIMELINE -->
+<div class="page" id="pg-timeline"><div class="ph"><h2>Timeline</h2><p>Evidence sorted by when it was originally captured. Useful for establishing sequences.</p></div><div id="timelineContent"></div></div>
+
+<!-- GPS MAP -->
+<div class="page" id="pg-map"><div class="ph"><h2>GPS Map</h2><p>Files with embedded GPS coordinates plotted on a map. Click markers for details.</p></div><div id="mapContainer"></div></div>
+
+<!-- SUSPECTS -->
+<div class="page" id="pg-suspects"><div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start"><div><h2>Suspects</h2><p>People of interest. Link evidence to them to build a case.</p></div><button class="btn bp" onclick="openModal('suspectModal');resetSuspectForm()" data-tip="Create a new suspect profile with identifiers like Telegram handles, crypto addresses, etc.">+ Add Suspect</button></div><div class="suspect-grid" id="suspectGrid"></div></div>
+
+<!-- SUSPECT MODAL -->
+<div class="mo" id="suspectModal"><div class="ml"><button class="mc" onclick="closeModal('suspectModal')">&times;</button>
+<h3 id="suspectModalTitle">Add Suspect</h3><input type="hidden" id="suspectEditId">
+<div class="fr"><div class="fg"><label>Name</label><input class="fi" id="susName" data-tip="Primary known name or handle"></div><div class="fg"><label>Threat Level</label><select class="fi" id="susThreat" data-tip="Your assessment of how dangerous this person is"><option value="unknown">Unknown</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div></div>
+<div class="fr"><div class="fg"><label>Aliases</label><input class="fi" id="susAliases" data-tip="Other names they go by, comma separated"></div><div class="fg"><label>Platform</label><input class="fi" id="susPlatform" data-tip="Where they operate: Telegram, Discord, etc."></div></div>
+<div class="fg" style="margin-bottom:10px"><label>Notes</label><textarea class="fi" id="susNotes" rows="3" data-tip="Free-form investigation notes"></textarea></div>
+<div id="susIdentifiers"><div class="fg" style="margin-bottom:6px"><label>Identifiers</label></div></div>
+<button class="btn bg btn-sm" onclick="addIdentField()" style="margin-bottom:12px" data-tip="Add a Telegram ID, crypto wallet, email, etc.">+ Add Identifier</button>
+<div class="br"><button class="btn bp" onclick="saveSuspect()">Save</button><button class="btn bd" id="btnDelSuspect" style="display:none" onclick="deleteSuspect()">Delete</button></div></div></div>
+<div class="mo" id="suspectDetailModal"><div class="ml" style="width:640px"><button class="mc" onclick="closeModal('suspectDetailModal')">&times;</button><div id="suspectDetailContent"></div></div></div>
+
+<!-- HASH LOOKUP -->
+<div class="page" id="pg-hash_lookup"><div class="ph"><h2>Hash Lookup</h2><p>Paste any hash (MD5, SHA-256, or perceptual) to find matching evidence in your library.</p></div>
+<div class="fr"><div class="fg"><input class="fi" id="hashInput" placeholder="Paste hash value" data-tip="Works with MD5 (32 chars), SHA-256 (64 chars), or pHash (16 chars)"></div><div class="fg" style="flex:0"><button class="btn bp" onclick="hashLookup()">Search</button></div></div><div id="hashResults" style="margin-top:16px"></div></div>
+
+<!-- FORENSIC SUITE -->
+<div class="page" id="pg-forensics">
+  <div class="ph"><h2>Forensic Analysis Suite</h2><p>Deep analysis beyond basic metadata. Run scene matching, audio fingerprinting, watermark detection, encoding chain analysis, screen recording detection, and lighting analysis.</p></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card">
+      <h3>Analyze Single File</h3>
+      <p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Select an evidence item and run all forensic modules on it.</p>
+      <div class="fg" style="margin-bottom:12px"><label>Evidence Item</label><select class="fi" id="forensicTarget"></select></div>
+      <button class="btn bp" onclick="runForensicSingle()" data-tip="Runs scene analysis, watermark detection, encoding chain analysis, screen recording detection, lighting analysis, and audio fingerprinting">Run Full Forensics</button>
+    </div>
+    <div class="card">
+      <h3>Batch Forensics</h3>
+      <p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Run forensics on all evidence that hasn't been analyzed yet. This can take a while for large libraries.</p>
+      <button class="btn bp" onclick="runForensicBatch()" data-tip="Analyzes every file that hasn't had forensics run yet">Run Batch Forensics</button>
+      <div id="forensicBatchResult" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <div id="forensicSingleResult"></div>
+
+  <div class="help-section" style="margin-top:16px">
+    <h3>What each module does</h3>
+    <ul>
+      <li><b>Scene Analysis</b> -- Builds a color/brightness/texture fingerprint of the environment. Used to find videos filmed in the same room or location.</li>
+      <li><b>Watermark Detection</b> -- Looks for consistent overlays (channel names, bot stamps) in the corners or edges of video frames. Reveals the redistribution chain.</li>
+      <li><b>Encoding Chain Analysis</b> -- Checks compression artifacts, bitrate ratios, and block boundaries to estimate whether a file is an original recording or a re-encoded copy, and approximately how many generations of re-encoding it's been through.</li>
+      <li><b>Screen Recording Detection</b> -- Identifies whether a video was screen-recorded from a phone app (like Telegram) rather than captured by a camera. Checks for status bars, navigation bars, phone screen resolutions, and frame rate patterns.</li>
+      <li><b>Lighting Analysis</b> -- Analyzes brightness and color temperature over time. Can distinguish natural vs artificial lighting and estimate indoor/outdoor/time-of-day characteristics.</li>
+      <li><b>Audio Fingerprinting</b> -- Extracts the audio track and creates a spectral fingerprint. Can match videos recorded in the same room by ambient sound. Requires ffmpeg installed.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCENE MATCHING -->
+<div class="page" id="pg-scene_match">
+  <div class="ph"><h2>Scene Matching</h2><p>Find videos that appear to be filmed in the same location based on color, brightness, and texture analysis. Run forensics on your evidence first.</p></div>
+  <button class="btn bp" onclick="loadSceneMatches()" style="margin-bottom:16px" data-tip="Compares scene fingerprints across your entire evidence library">Find Scene Matches</button>
+  <div id="sceneMatchResults"></div>
+</div>
+
+<!-- AUDIO MATCHING -->
+<div class="page" id="pg-audio_match">
+  <div class="ph"><h2>Audio Matching</h2><p>Find videos with matching audio environments. Same room, same background noise. Requires ffmpeg for audio extraction.</p></div>
+  <button class="btn bp" onclick="loadAudioMatches()" style="margin-bottom:16px" data-tip="Compares audio fingerprints across your evidence library">Find Audio Matches</button>
+  <div id="audioMatchResults"></div>
+</div>
+
+<!-- EXPORT -->
+<div class="page" id="pg-export"><div class="ph"><h2>Export &amp; Import</h2><p>Download evidence packages or import from another Palimpsest instance.</p></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div class="card"><h3>JSON Export</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Machine-readable. Full metadata, hashes, and forensic results. Good for importing into another Palimpsest or feeding to other tools.</p><div class="fg" style="margin-bottom:12px"><label>Suspect</label><select class="fi" id="exportJsonSuspect"><option value="">All</option></select></div><button class="btn bp" onclick="exportJSON()" data-tip="Downloads a .json file">Export JSON</button></div>
+<div class="card"><h3>PDF Report</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Formatted evidence report. Professional enough for law enforcement handoff.</p><div class="fg" style="margin-bottom:12px"><label>Suspect</label><select class="fi" id="exportPdfSuspect"><option value="">All</option></select></div><button class="btn bp" onclick="exportPDF()" data-tip="Downloads a formatted .pdf report">Export PDF</button></div>
+<div class="card"><h3>CSV Spreadsheet</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Opens in Excel, Google Sheets, or any spreadsheet app. One row per evidence item. Good for sharing with people who don't have Palimpsest.</p><div class="fg" style="margin-bottom:12px"><label>Suspect</label><select class="fi" id="exportCsvSuspect"><option value="">All</option></select></div><button class="btn bp" onclick="exportCSV()" data-tip="Downloads a .csv file you can open in any spreadsheet app">Export CSV</button></div>
+<div class="card"><h3>HTML Report</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Standalone web page. Opens in any browser, no software needed. Email it to anyone. Dark themed, same Palimpsest look.</p><div class="fg" style="margin-bottom:12px"><label>Suspect</label><select class="fi" id="exportHtmlSuspect"><option value="">All</option></select></div><button class="btn bp" onclick="exportHTML()" data-tip="Downloads a self-contained .html file anyone can open">Export HTML</button></div>
+<div class="card"><h3>Markdown Report</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Clean text report. Good for pasting into Discord, docs, GitHub issues, or anywhere that renders markdown.</p><div class="fg" style="margin-bottom:12px"><label>Suspect</label><select class="fi" id="exportMdSuspect"><option value="">All</option></select></div><button class="btn bp" onclick="exportMarkdown()" data-tip="Downloads a .md text file">Export Markdown</button></div>
+<div class="card"><h3>Import Palimpsest Data</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Load evidence from someone else's Palimpsest JSON export into your instance. Suspects are imported too. Duplicates (same SHA-256) are skipped automatically.</p>
+<div class="drop-zone" style="padding:24px" id="importDrop" onclick="document.getElementById('importInput').click()"><div style="font-size:24px;margin-bottom:4px">&#128229;</div><div style="font-size:13px">Drop a Palimpsest JSON export here or click to browse</div></div>
+<input type="file" id="importInput" style="display:none" accept=".json" onchange="importPalimpsest(this.files[0])">
+<div id="importResult" style="margin-top:8px"></div></div>
+</div></div>
+
+<!-- HELP -->
+<div class="page" id="pg-help">
+  <div class="ph"><h2>Help &amp; Tutorial</h2><p>Everything you need to know about Palimpsest</p></div>
+  <div style="margin-bottom:20px">
+    <button class="btn bp" onclick="startTutorial()" style="font-size:15px;padding:12px 24px" data-tip="Walks you through the whole app step by step">&#127891; Start Interactive Tutorial</button>
+  </div>
+
+  <div class="help-section">
+    <h3>What is Palimpsest?</h3>
+    <p>Palimpsest is a metadata forensics toolkit. When someone takes a photo or records a video, the file contains hidden data: what camera was used, when it was taken, GPS coordinates, software used to edit it, and more. This tool extracts, analyzes, and organizes all of that data to support investigations.</p>
+    <p style="margin-top:8px">The name comes from a palimpsest, a manuscript where the original writing has been scraped off and written over, but traces of the old text remain underneath. Just like metadata: you can try to erase it, but traces often remain.</p>
+    <p style="margin-top:8px">Built by <a href="https://ephemeradev.net" target="_blank" class="help-link">Ephemera</a>. Source available on <a href="https://github.com/ephemera02" target="_blank" class="help-link">GitHub</a>.</p>
+  </div>
+
+  <div class="help-section">
+    <h3>Getting Started</h3>
+    <ul>
+      <li><b>Step 1:</b> Go to <b>File Analyzer</b> and drop a photo or video. Palimpsest will extract everything hidden inside it.</li>
+      <li><b>Step 2:</b> Review the results. <b>Simple Mode</b> explains each field in plain English. <b>Advanced Mode</b> shows raw technical data.</li>
+      <li><b>Step 3:</b> Your file is now in the <b>Evidence Library</b>. You can search, filter, and organize it.</li>
+      <li><b>Step 4:</b> Create <b>Suspects</b> and link evidence to them to build case files.</li>
+      <li><b>Step 5:</b> Go to <b>Forensic Suite</b> and run batch forensics. Then check <b>Scene Matching</b> and <b>Audio Matching</b> for connections.</li>
+      <li><b>Step 6:</b> Use <b>Export &amp; Import</b> to generate reports in any format, or import evidence from a teammate's Palimpsest export.</li>
+    </ul>
+  </div>
+
+  <div class="help-section">
+    <h3>Features Explained</h3>
+    <ul>
+      <li><b>File Analyzer</b> -- Drop any image or video. Palimpsest extracts EXIF data, GPS coordinates, camera info, hashes, and checks for signs of metadata stripping. Videos also get 8 frames automatically extracted for visual review.</li>
+      <li><b>Simple vs Advanced Mode</b> -- Simple mode shows each metadata field with a plain-English explanation of what it means. Advanced mode shows raw data for technical users.</li>
+      <li><b>Batch Process</b> -- Select a whole folder of files. Each one gets fully analyzed. Great for processing evidence dumps.</li>
+      <li><b>Compare</b> -- Pick any two evidence items. Palimpsest checks whether they share the same camera, location, date, codec, resolution, or visual similarity.</li>
+      <li><b>Duplicate Detection</b> -- Finds exact copies (identical SHA-256 hash) and near-duplicates (visually similar via perceptual hashing). Works across videos and images.</li>
+      <li><b>Evidence Library</b> -- A searchable table of everything you've imported. Filter by type, GPS, or stripping status. Click any row for full details.</li>
+      <li><b>Timeline</b> -- All dated evidence sorted chronologically. Useful for establishing event sequences.</li>
+      <li><b>GPS Map</b> -- Files with embedded GPS coordinates plotted on an interactive map.</li>
+      <li><b>Suspects</b> -- Create profiles with names, aliases, platform info, threat levels, and typed identifiers (Telegram handles, crypto wallets, emails, etc). Link evidence to suspects to build case files.</li>
+      <li><b>Hash Lookup</b> -- Paste any MD5, SHA-256, or perceptual hash to find matching evidence.</li>
+      <li><b>Export &amp; Import</b> -- Five export formats: JSON (machine-readable, importable into other Palimpsest instances), PDF (law enforcement handoff), CSV (spreadsheets, shareable with anyone), HTML (standalone dark-themed report, opens in any browser), and Markdown (paste into Discord/docs). Import lets you load someone else's Palimpsest JSON export into your instance. Duplicates are auto-skipped by SHA-256. All exports filterable by suspect.</li>
+      <li><b>Forensic Suite</b> -- Deep analysis beyond basic metadata. Scene analysis builds environment fingerprints. Watermark detection finds channel stamps and bot overlays. Encoding chain analysis estimates whether a file is original or a re-encoded copy. Screen recording detection identifies Telegram screen grabs. Lighting analysis characterizes the environment. Audio fingerprinting matches videos by ambient sound.</li>
+      <li><b>Scene Matching</b> -- After running forensics, compares environment fingerprints across your whole library to find videos filmed in the same room or location.</li>
+      <li><b>Audio Matching</b> -- Compares audio fingerprints to find videos recorded in the same environment. Same background noise = same room. Requires ffmpeg.</li>
+    </ul>
+  </div>
+
+  <div class="help-section">
+    <h3>What is Metadata Stripping?</h3>
+    <p>When someone wants to hide where a photo or video came from, they can use tools to remove ("strip") the metadata. Palimpsest looks for signs this has happened:</p>
+    <ul>
+      <li>No EXIF data at all (most cameras always embed it)</li>
+      <li>Camera info present but dates removed (selective stripping)</li>
+      <li>Editing software detected (Photoshop, GIMP, etc.)</li>
+      <li>Modification date different from capture date</li>
+      <li>Minimal video container data (re-encoded to strip)</li>
+    </ul>
+    <p style="margin-top:8px">A stripping warning doesn't prove anything on its own, but it's a red flag worth noting.</p>
+  </div>
+
+  <div class="help-section">
+    <h3>What are Perceptual Hashes?</h3>
+    <p>Regular hashes (MD5, SHA-256) change completely if even one pixel is different. Perceptual hashes (pHash, dHash, etc.) create a "visual fingerprint" of what the image looks like. Two photos of the same scene will have similar perceptual hashes even if one was cropped, compressed, or resized.</p>
+    <p style="margin-top:8px">This is how Palimpsest finds near-duplicates, and it's why the same re-uploaded video can be tracked across platforms even if it's been re-encoded.</p>
+  </div>
+
+  <div class="help-section">
+    <h3>Dependencies</h3>
+    <p>Palimpsest needs these Python packages. All are pip-installable, no external DLLs:</p>
+    <ul>
+      <li><b>Flask</b> -- Web framework (runs the local UI)</li>
+      <li><b>Pillow</b> -- Image EXIF extraction</li>
+      <li><b>imagehash</b> -- Perceptual hashing (pHash, dHash, wHash, aHash)</li>
+      <li><b>opencv-python-headless</b> -- Video analysis, frame extraction, thumbnails, forensic vision</li>
+      <li><b>hachoir</b> -- Video container metadata (creation dates, codecs, encoder info)</li>
+      <li><b>numpy</b> -- Numerical processing for forensic analysis</li>
+      <li><b>scipy</b> -- Audio spectral analysis and signal processing</li>
+      <li><b>ffmpeg</b> -- Audio extraction from video files (install separately, not a Python package). Download from <a href="https://ffmpeg.org/download.html" target="_blank" class="help-link">ffmpeg.org</a></li>
+      <li><b>reportlab</b> -- PDF report generation (optional)</li>
+    </ul>
+    <p style="margin-top:8px"><span style="color:var(--accent);cursor:pointer" onclick="checkDeps()">Click here to check your dependencies</span></p>
+  </div>
+
+  <div class="help-section">
+    <h3>About</h3>
+    <p>Palimpsest is part of the investigation toolkit ecosystem built by Ephemera.</p>
+    <p style="margin-top:8px">Website: <a href="https://ephemeradev.net" target="_blank" class="help-link">ephemeradev.net</a></p>
+    <p>GitHub: <a href="https://github.com/ephemera02" target="_blank" class="help-link">github.com/ephemera02</a></p>
+    <p style="margin-top:8px;color:var(--fg3)">This tool is free and open source. If it helps your work, that's all that matters.</p>
+  </div>
+</div>
+
+</div></div></div>
+
+<!-- Tutorial overlay -->
+<div class="tut-overlay" id="tutOverlay"></div>
+<div class="tut-highlight" id="tutHighlight" style="display:none"></div>
+<div class="tut-popup" id="tutPopup" style="display:none"></div>
+<div class="toast" id="toast"></div>
+<script>
+let currentMode='simple',suspects=[],leafletMap=null,evPage=1;
+
+// --- Navigation ---
+document.querySelectorAll('.ni[data-page]').forEach(n=>{n.addEventListener('click',()=>{goToPage(n.dataset.page);});});
+function goToPage(p){document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));const nav=document.querySelector(`.ni[data-page="${p}"]`);if(nav)nav.classList.add('active');document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));const pg=document.getElementById('pg-'+p);if(pg)pg.classList.add('active');if(p==='dashboard')loadDashboard();if(p==='evidence')loadEvidence();if(p==='suspects')loadSuspects();if(p==='map')loadMap();if(p==='compare')loadCompareOptions();if(p==='timeline')loadTimeline();if(p==='forensics')loadForensicTargets();if(['analyze','batch','export'].includes(p))loadSuspectSelects();}
+
+// --- Utilities ---
+function toast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+type;setTimeout(()=>t.className='toast',3000);}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';if(b<1073741824)return(b/1048576).toFixed(1)+' MB';return(b/1073741824).toFixed(2)+' GB';}
+function fmtDur(s){if(!s)return'-';const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0');}
+function setMode(m,btn){currentMode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+
+// =====================================================================
+// INTERACTIVE TUTORIAL
+// =====================================================================
+const TUTORIAL_STEPS = [
+  {mascot:"&#128075;",title:"Hey there! Welcome to Palimpsest.",body:"I'm gonna walk you through the whole app. It's easier than it looks, I promise. Hit Next whenever you're ready.",target:null,page:null},
+  {mascot:"&#128200;",title:"This is the Dashboard.",body:"Your home base. It shows how many files you've imported, how many suspects you're tracking, which cameras show up the most, and other stats. It updates automatically as you work.",target:"pg-dashboard",page:"dashboard"},
+  {mascot:"&#128269;",title:"The File Analyzer is where it all starts.",body:"This is the core of Palimpsest. You drag a video or image onto the drop zone, and it extracts every piece of hidden data from the file. Camera model, GPS coordinates, timestamps, editing software, hashes, everything. For videos it also pulls out sample frames automatically.",target:"dropZone",page:"analyze"},
+  {mascot:"&#129300;",title:"Simple Mode vs Advanced Mode.",body:"If you're new to metadata, keep it on Simple Mode. Every field gets a plain-English explanation of what it is and why it matters. Advanced Mode shows the raw technical data for people who know what they're looking at.",target:null,page:"analyze"},
+  {mascot:"&#128230;",title:"Batch Process handles bulk.",body:"Got a folder with 50 files? Drop them all here. Each one gets fully analyzed, hashed, and stored. You can link them all to a suspect at once too.",target:"batchDrop",page:"batch"},
+  {mascot:"&#8644;",title:"Compare puts two files side by side.",body:"Pick any two evidence items and Palimpsest checks if they share the same camera, location, date, codec, resolution, or visual similarity. Great for connecting material from different sources.",target:null,page:"compare"},
+  {mascot:"&#128203;",title:"Duplicate Detection finds copies.",body:"This scans your whole evidence library. Exact duplicates (identical SHA-256 hash, same file byte-for-byte) and near-duplicates (visually similar via perceptual hashing, even if re-encoded or cropped).",target:null,page:"duplicates"},
+  {mascot:"&#128206;",title:"The Evidence Library is your filing cabinet.",body:"Every file you've imported shows up here in a searchable, filterable table. You can filter by type (video/image), GPS status, or stripping status. Click any row to see full details, play videos, view extracted frames, and edit tags.",target:null,page:"evidence"},
+  {mascot:"&#9200;",title:"Timeline sorts by capture date.",body:"All evidence that has a date is shown in chronological order. This is useful for establishing sequences of events, seeing patterns, or figuring out when something was created vs. when it was shared.",target:null,page:"timeline"},
+  {mascot:"&#127758;",title:"The GPS Map shows locations.",body:"Any file with embedded GPS coordinates gets plotted on an interactive map. Click markers to see which file was taken there. Useful for geolocating suspects or crime scenes.",target:"mapContainer",page:"map"},
+  {mascot:"&#9678;",title:"Suspects are your persons of interest.",body:"Create a profile with their name, aliases, platform (Telegram, Discord, etc.), threat level, and identifiers like usernames, crypto wallets, emails, or phone numbers. Then link evidence to them to build a case file.",target:null,page:"suspects"},
+  {mascot:"#",title:"Hash Lookup lets you search by fingerprint.",body:"Every file gets multiple hashes: MD5, SHA-256 (exact identity), and perceptual hashes (visual fingerprint). Paste any hash here to find matching evidence. This is how you cross-reference material across platforms.",target:null,page:"hash_lookup"},
+  {mascot:"&#8599;",title:"Export and Import.",body:"Five export formats: JSON (machine-readable, can be imported into another Palimpsest), PDF (law enforcement handoff), CSV (spreadsheets), HTML (standalone report anyone can open in a browser), and Markdown (paste into Discord or docs). You can also import someone else's Palimpsest export into your own instance. Duplicates are skipped automatically.",target:null,page:"export"},
+  {mascot:"&#128300;",title:"The Forensic Suite is where it gets serious.",body:"This runs deep analysis on your videos. Scene matching finds videos filmed in the same room by comparing color/brightness/texture fingerprints. Watermark detection finds channel stamps and bot overlays. Encoding chain analysis tells you if something is an original or a re-encoded copy. Screen recording detection identifies Telegram screen grabs vs camera captures. Audio fingerprinting matches videos by ambient sound.",target:null,page:"forensics"},
+  {mascot:"&#127968;",title:"Scene Matching finds the same room.",body:"After running forensics, the scene matcher compares environment fingerprints across your whole library. If two videos were filmed in the same location (same floor tiles, wall colors, lighting), this will flag them even if the camera angle is different.",target:null,page:"scene_match"},
+  {mascot:"&#127881;",title:"That's the whole app!",body:"You're ready to go. Drop your first file into the File Analyzer to get started. For deep analysis, run the Forensic Suite after importing. If you ever need a refresher, the Help page has everything written out, and you can re-run this tutorial anytime.",target:null,page:"help"},
+];
+let tutStep = 0;
+
+function startTutorial() {
+  tutStep = 0;
+  document.getElementById('tutOverlay').classList.add('active');
+  showTutStep();
+}
+
+function showTutStep() {
+  const step = TUTORIAL_STEPS[tutStep];
+  if (!step) { endTutorial(); return; }
+
+  // Navigate to page if needed
+  if (step.page) goToPage(step.page);
+
+  const popup = document.getElementById('tutPopup');
+  const highlight = document.getElementById('tutHighlight');
+
+  // Highlight target element
+  if (step.target) {
+    const el = document.getElementById(step.target);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      highlight.style.display = 'block';
+      highlight.style.left = (rect.left - 4) + 'px';
+      highlight.style.top = (rect.top - 4) + 'px';
+      highlight.style.width = (rect.width + 8) + 'px';
+      highlight.style.height = (rect.height + 8) + 'px';
+    }
+  } else {
+    highlight.style.display = 'none';
+  }
+
+  // Position popup
+  popup.style.display = 'block';
+  popup.innerHTML = `
+    <div class="tut-mascot">${step.mascot}</div>
+    <div class="tut-step">Step ${tutStep + 1} of ${TUTORIAL_STEPS.length}</div>
+    <h4>${step.title}</h4>
+    <p>${step.body}</p>
+    <div class="tut-btns">
+      ${tutStep > 0 ? '<button class="btn bg btn-sm" onclick="tutPrev()">Back</button>' : ''}
+      ${tutStep < TUTORIAL_STEPS.length - 1 ? '<button class="btn bp btn-sm" onclick="tutNext()">Next</button>' : '<button class="btn bs btn-sm" onclick="endTutorial()">Done!</button>'}
+      <button class="btn bg btn-sm" onclick="endTutorial()" style="margin-left:auto;font-size:11px;color:var(--fg3)">Skip</button>
+    </div>`;
+
+  // Smart positioning
+  if (step.target) {
+    const el = document.getElementById(step.target);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const below = rect.bottom + 16;
+      const right = window.innerWidth - 400;
+      popup.style.top = Math.min(below, window.innerHeight - 300) + 'px';
+      popup.style.left = Math.min(rect.left, right) + 'px';
+    } else {
+      centerPopup();
+    }
+  } else {
+    centerPopup();
+  }
+}
+
+function centerPopup() {
+  const popup = document.getElementById('tutPopup');
+  popup.style.top = '50%';
+  popup.style.left = '50%';
+  popup.style.transform = 'translate(-50%, -50%)';
+}
+
+function tutNext() { tutStep++; document.getElementById('tutPopup').style.transform=''; showTutStep(); }
+function tutPrev() { tutStep--; document.getElementById('tutPopup').style.transform=''; showTutStep(); }
+function endTutorial() {
+  document.getElementById('tutOverlay').classList.remove('active');
+  document.getElementById('tutHighlight').style.display = 'none';
+  document.getElementById('tutPopup').style.display = 'none';
+  document.getElementById('tutPopup').style.transform = '';
+}
+
+// =====================================================================
+// CORE APP LOGIC (same as v2 but with beginner-friendly tweaks)
+// =====================================================================
+async function loadDashboard(){
+  const r=await fetch('/api/dashboard').then(r=>r.json());
+  document.getElementById('nEv').textContent=r.evidence_count;document.getElementById('nSus').textContent=r.suspect_count;
+  document.getElementById('dashStats').innerHTML=`
+    <div class="dash-stat" data-tip="Total files you've imported"><div class="num">${r.evidence_count}</div><div class="lbl">Evidence</div></div>
+    <div class="dash-stat" data-tip="People of interest you're tracking"><div class="num">${r.suspect_count}</div><div class="lbl">Suspects</div></div>
+    <div class="dash-stat" data-tip="Photo files"><div class="num">${r.image_count}</div><div class="lbl">Images</div></div>
+    <div class="dash-stat" data-tip="Video files"><div class="num">${r.video_count}</div><div class="lbl">Videos</div></div>
+    <div class="dash-stat" data-tip="Files with GPS coordinates embedded"><div class="num">${r.gps_count}</div><div class="lbl">GPS Tagged</div></div>
+    <div class="dash-stat" data-tip="Files where metadata appears to have been removed"><div class="num" style="color:var(--red)">${r.stripped_count}</div><div class="lbl">Stripped</div></div>
+    <div class="dash-stat" data-tip="Combined file size of all evidence"><div class="num" style="font-size:18px">${fmtSize(r.total_size)}</div><div class="lbl">Total Size</div></div>
+    <div class="dash-stat" data-tip="Combined duration of all videos"><div class="num" style="font-size:18px">${fmtDur(r.total_duration)}</div><div class="lbl">Video Time</div></div>`;
+  let ch='';const mx=Math.max(...r.cameras.map(c=>c.count),1);
+  r.cameras.forEach(c=>{ch+=`<div class="db"><div class="dn">${c.camera||'Unknown'}</div><div class="bar" style="width:${c.count/mx*100}%"></div><div class="dnum">${c.count}</div></div>`;});
+  document.getElementById('dashCameras').innerHTML=ch||'<div style="color:var(--fg3);font-size:13px">No camera data yet. Import some files first!</div>';
+  let cc='';const cmx=Math.max(...(r.codecs||[]).map(c=>c.count),1);
+  (r.codecs||[]).forEach(c=>{cc+=`<div class="db"><div class="dn">${c.codec}</div><div class="bar" style="width:${c.count/cmx*100}%;background:var(--purple)"></div><div class="dnum">${c.count}</div></div>`;});
+  document.getElementById('dashCodecs').innerHTML=cc||'<div style="color:var(--fg3);font-size:13px">No codec data yet.</div>';
+  let rh='';r.recent.forEach(e=>{rh+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer" onclick="showEvDetail(${e.id})"><span style="color:var(--accent)">${e.media_type==='video'?'&#127909;':'&#128247;'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.file_name}</span>${e.duration?'<span class="video-badge">'+fmtDur(e.duration)+'</span>':''}<span style="color:var(--fg3);font-size:11px;font-family:var(--mono)">${e.added_at?.split('T')[0]||''}</span></div>`;});
+  document.getElementById('dashRecent').innerHTML=rh||'<div style="color:var(--fg3)">No evidence yet. Head to File Analyzer to get started!</div>';
+}
+
+async function loadSuspectSelects(){suspects=await fetch('/api/suspects').then(r=>r.json());const o='<option value="">None</option>'+suspects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');document.querySelectorAll('#analyzeSuspect,#batchSuspect,#exportJsonSuspect,#exportPdfSuspect,#exportCsvSuspect,#exportHtmlSuspect,#exportMdSuspect').forEach(s=>s.innerHTML=o);}
+
+// Drop zones
+const dz=document.getElementById('dropZone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files.length)analyzeFile(e.dataTransfer.files[0]);});
+const bd=document.getElementById('batchDrop');bd.addEventListener('dragover',e=>{e.preventDefault();bd.classList.add('dragover');});bd.addEventListener('dragleave',()=>bd.classList.remove('dragover'));bd.addEventListener('drop',e=>{e.preventDefault();bd.classList.remove('dragover');if(e.dataTransfer.files.length)batchAnalyze(e.dataTransfer.files);});
+
+async function analyzeFile(file){if(!file)return;const fd=new FormData();fd.append('file',file);const sid=document.getElementById('analyzeSuspect').value;if(sid)fd.append('suspect_id',sid);fd.append('tags',document.getElementById('analyzeTags').value);toast('Analyzing '+file.name+'... hang tight');const r=await fetch('/api/analyze',{method:'POST',body:fd}).then(r=>r.json());if(r.error){toast(r.error,'error');return;}renderAnalysis(r);toast('Analysis complete!');}
+
+function renderAnalysis(r){
+  const el=document.getElementById('analysisResult');el.style.display='block';const m=r.metadata||{},s=m.stripping||{},simple=currentMode==='simple';
+  let h='<div class="card"><h3>'+r.file_name+(r.media_type==='video'?' <span class="video-badge">VIDEO</span>':'')+'</h3>';
+  h+=`<div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px;color:var(--fg2);flex-wrap:wrap"><span>Type: <b style="color:var(--fg)">${r.media_type}</b></span><span>Size: <b style="color:var(--fg)">${fmtSize(r.file_size)}</b></span>`;
+  if(m.dimensions)h+=`<span>${m.dimensions.width}x${m.dimensions.height}</span>`;
+  if(m.duration)h+=`<span>Duration: <b style="color:var(--fg)">${fmtDur(m.duration)}</b></span>`;
+  if(m.fps)h+=`<span>${m.fps} fps</span>`;h+='</div>';
+  if(s.detected){h+='<div class="strip-warn">&#9888; <b>Metadata anomalies detected</b> -- this file may have had its metadata tampered with or stripped.<br>';(s.indicators||[]).forEach(i=>h+='&bull; '+i+'<br>');h+='</div>';}
+  else{h+='<div class="strip-ok">&#10003; No signs of metadata stripping. This file appears unmodified.</div>';}
+  h+='<h3 style="margin-top:16px" data-tip="Unique fingerprints for this file. MD5/SHA-256 identify exact copies. pHash identifies visually similar files.">Hashes (file fingerprints)</h3><div class="hash-grid">';
+  ['md5','sha256','phash','dhash','whash','ahash'].forEach(k=>{if(r.hashes[k])h+=`<div class="hash-item"><div class="hl">${k.toUpperCase()}</div><div class="hv">${r.hashes[k]}</div></div>`;});h+='</div>';
+  if(m.camera&&(m.camera.make||m.camera.model))h+=`<h3 style="margin-top:16px">Camera/Device</h3><div style="padding:8px 0;font-size:13px">${m.camera.make} ${m.camera.model}${m.camera.software?' &bull; '+m.camera.software:''}</div>`;
+  if(m.dates){const d=m.dates;if(d.original||d.modified||d.creation){h+='<h3 style="margin-top:16px">Dates</h3>';if(d.original)h+=`<div class="meta-field"><span class="mf-key">Original Capture</span><span class="mf-val">${d.original}</span></div>`;if(d.creation)h+=`<div class="meta-field"><span class="mf-key">Creation Date</span><span class="mf-val">${d.creation}</span></div>`;if(d.modified)h+=`<div class="meta-field"><span class="mf-key">Modified</span><span class="mf-val">${d.modified}</span></div>`;}}
+  if(m.gps)h+=`<h3 style="margin-top:16px">GPS Location</h3><div style="padding:8px 0;font-size:13px;font-family:var(--mono)">${m.gps.lat.toFixed(6)}, ${m.gps.lon.toFixed(6)}${m.gps.alt!==null?' &bull; Alt: '+m.gps.alt.toFixed(1)+'m':''}</div><a href="https://www.google.com/maps?q=${m.gps.lat},${m.gps.lon}" target="_blank" style="color:var(--accent);font-size:12px">Open in Google Maps &#8599;</a>`;
+  if(simple&&m.fields_explained&&Object.keys(m.fields_explained).length){h+='<h3 style="margin-top:16px">Metadata (with explanations)</h3>';Object.entries(m.fields_explained).forEach(([k,v])=>{h+=`<div class="meta-field"><span class="mf-key">${k}<div class="mf-explain">${v.explanation}</div></span><span class="mf-val">${v.value}</span></div>`;});}
+  else if(!simple&&m.fields&&Object.keys(m.fields).length){h+='<h3 style="margin-top:16px">All Metadata Fields</h3>';Object.entries(m.fields).forEach(([k,v])=>{h+=`<div class="meta-field"><span class="mf-key">${k}</span><span class="mf-val">${typeof v==='object'?JSON.stringify(v):v}</span></div>`;});}
+  if(!simple&&m.raw&&Object.keys(m.raw).length>0){h+='<h3 style="margin-top:16px">Raw Container Data</h3>';Object.entries(m.raw).forEach(([k,v])=>{if(typeof v==='object'){Object.entries(v).forEach(([sk,sv])=>{h+=`<div class="meta-field"><span class="mf-key">${k}.${sk}</span><span class="mf-val">${sv}</span></div>`;});}else{h+=`<div class="meta-field"><span class="mf-key">${k}</span><span class="mf-val">${v}</span></div>`;}});}
+  h+='</div>';el.innerHTML=h;
+}
+
+async function batchAnalyze(files){if(!files.length)return;const fd=new FormData();for(let f of files)fd.append('files',f);const sid=document.getElementById('batchSuspect').value;if(sid)fd.append('suspect_id',sid);toast(`Processing ${files.length} files...`);const r=await fetch('/api/analyze/batch',{method:'POST',body:fd}).then(r=>r.json());let h=`<div class="card"><h3>&#10003; Processed ${r.count} files</h3><table class="mt"><thead><tr><th>File</th><th>Type</th><th>Duration</th><th>Stripped</th></tr></thead><tbody>`;r.results.forEach(e=>{h+=`<tr><td>${e.file_name}</td><td>${e.media_type}</td><td>${fmtDur(e.duration)}</td><td>${e.stripping_detected?'<span style="color:var(--red)">YES</span>':'<span style="color:var(--green)">No</span>'}</td></tr>`;});h+='</tbody></table></div>';document.getElementById('batchResults').innerHTML=h;toast(`${r.count} files analyzed!`);}
+
+async function loadEvidence(){const q=document.getElementById('evSearch').value,mt=document.getElementById('evType').value,fl=document.getElementById('evFilter').value;let url=`/api/evidence?page=${evPage}&per_page=30`;if(q)url+='&q='+encodeURIComponent(q);if(mt)url+='&media_type='+mt;if(fl==='gps')url+='&has_gps=1';if(fl==='stripped')url+='&stripped=1';const r=await fetch(url).then(r=>r.json());let h='';r.items.forEach(e=>{const sus=suspects.find(s=>s.id===e.suspect_id);h+=`<tr onclick="showEvDetail(${e.id})"><td><img class="ev-thumb" src="/thumbnails/${e.id}.jpg" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22><rect fill=%22%23232738%22 width=%2248%22 height=%2248%22 rx=%226%22/></svg>'"></td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.file_name}</td><td>${e.media_type==='video'?'<span class="video-badge">video</span>':e.media_type}</td><td style="font-family:var(--mono);font-size:12px">${fmtDur(e.duration)}</td><td style="font-size:12px;color:var(--fg2)">${e.codec||'-'}</td><td style="font-size:12px;font-family:var(--mono);color:var(--fg2)">${e.original_date||e.creation_date||'-'}</td><td>${e.has_gps?'<span style="color:var(--green)">&#10003;</span>':'-'}</td><td>${e.stripping_detected?'<span style="color:var(--red)">&#9888;</span>':'-'}</td><td>${sus?'<span class="tag">'+sus.name+'</span>':'-'}</td><td><button class="btn bd btn-sm" onclick="event.stopPropagation();deleteEvidence(${e.id})">&#10005;</button></td></tr>`;});
+document.getElementById('evTable').innerHTML=h||'<tr><td colspan="10" style="text-align:center;color:var(--fg3);padding:24px">No evidence found. Import some files from the File Analyzer!</td></tr>';document.getElementById('evPagination').textContent=`Page ${r.page} -- ${r.total} items`;}
+
+async function showEvDetail(id){const r=await fetch(`/api/evidence/${id}`).then(r=>r.json());let h=`<h3>${r.file_name} ${r.media_type==='video'?'<span class="video-badge">VIDEO</span>':''}</h3>`;
+if(r.media_type==='image'){
+  h+=`<div class="vp-container">
+    <div class="vp-viewport" id="vpViewport" style="text-align:center">
+      <img id="evDetailImg" src="/uploads/${r.file_path}" style="max-width:100%;transform-origin:0 0;transition:filter .15s;cursor:grab" onerror="this.style.display='none'">
+    </div>
+    <div class="vp-controls">
+      <div class="vp-row">
+        <span style="font-size:11px;color:var(--fg3);font-weight:600">ZOOM</span>
+        <button class="vp-btn" onclick="vpZoomImg(0.5)">0.5x</button>
+        <button class="vp-btn" onclick="vpZoomImg(1)">1x</button>
+        <button class="vp-btn" onclick="vpZoomImg(2)">2x</button>
+        <button class="vp-btn" onclick="vpZoomImg(4)">4x</button>
+        <button class="vp-btn" onclick="vpZoomImg(8)">8x</button>
+        <button class="vp-btn" onclick="vpZoomImg(16)">16x</button>
+        <input type="range" id="vpZoomSlider" min="10" max="3200" value="100" oninput="vpZoomImg(this.value/100)">
+        <span class="vp-zoom-display" id="vpZoomVal">1.0x</span>
+      </div>
+      <div class="vp-row">
+        <div class="vp-slider-group"><label>Brightness</label><input type="range" id="vpBright" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpBrightVal">100</span></div>
+        <div class="vp-slider-group"><label>Contrast</label><input type="range" id="vpContrast" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpContrastVal">100</span></div>
+        <div class="vp-slider-group"><label>Saturation</label><input type="range" id="vpSat" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpSatVal">100</span></div>
+      </div>
+      <div class="vp-row">
+        <div class="vp-slider-group"><label>Hue</label><input type="range" id="vpHue" min="0" max="360" value="0" oninput="vpApplyFilters()"><span class="vp-val" id="vpHueVal">0</span></div>
+        <div class="vp-slider-group"><label>Gamma</label><input type="range" id="vpGamma" min="20" max="500" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpGammaVal">1.0</span></div>
+        <button class="vp-btn" id="vpInvertBtn" onclick="vpToggleInvert()">Invert</button>
+        <button class="vp-btn" onclick="vpResetFilters()">Reset</button>
+      </div>
+    </div>
+  </div>`;
+}
+if(r.media_type==='video'){
+  h+=`<div class="vp-container">
+    <div class="vp-viewport" id="vpViewport">
+      <video id="vpVideo" src="/previews/${r.id}.mp4" onerror="this.src='/uploads/${r.file_path}'" preload="auto"></video>
+    </div>
+    <div class="vp-controls">
+      <div class="vp-row">
+        <button class="vp-btn" onclick="vpPlay()" id="vpPlayBtn" data-tip="Play/Pause">&#9654; Play</button>
+        <button class="vp-btn" onclick="vpStep(-1)" data-tip="Back 1 frame">&#9664; Frame</button>
+        <button class="vp-btn" onclick="vpStep(1)" data-tip="Forward 1 frame">Frame &#9654;</button>
+        <input type="range" id="vpSeek" min="0" max="100" value="0" style="flex:1;accent-color:var(--accent)" oninput="vpSeekTo(this.value)" data-tip="Scrub through video">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--fg3);min-width:80px" id="vpTime">0:00 / 0:00</span>
+      </div>
+      <div class="vp-row">
+        <span style="font-size:11px;color:var(--fg3);font-weight:600">ZOOM</span>
+        <button class="vp-btn" onclick="vpZoom(0.5)">0.5x</button>
+        <button class="vp-btn" onclick="vpZoom(1)">1x</button>
+        <button class="vp-btn" onclick="vpZoom(2)">2x</button>
+        <button class="vp-btn" onclick="vpZoom(4)">4x</button>
+        <button class="vp-btn" onclick="vpZoom(8)">8x</button>
+        <button class="vp-btn" onclick="vpZoom(16)">16x</button>
+        <input type="range" id="vpZoomSlider" min="10" max="3200" value="100" oninput="vpZoom(this.value/100)" data-tip="Drag for precise zoom (up to 32x)">
+        <span class="vp-zoom-display" id="vpZoomVal">1.0x</span>
+      </div>
+      <div class="vp-row">
+        <div class="vp-slider-group"><label>Brightness</label><input type="range" id="vpBright" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpBrightVal">100</span></div>
+        <div class="vp-slider-group"><label>Contrast</label><input type="range" id="vpContrast" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpContrastVal">100</span></div>
+        <div class="vp-slider-group"><label>Saturation</label><input type="range" id="vpSat" min="0" max="300" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpSatVal">100</span></div>
+      </div>
+      <div class="vp-row">
+        <div class="vp-slider-group"><label>Hue</label><input type="range" id="vpHue" min="0" max="360" value="0" oninput="vpApplyFilters()"><span class="vp-val" id="vpHueVal">0</span></div>
+        <div class="vp-slider-group"><label>Gamma</label><input type="range" id="vpGamma" min="20" max="500" value="100" oninput="vpApplyFilters()"><span class="vp-val" id="vpGammaVal">1.0</span></div>
+        <button class="vp-btn" id="vpInvertBtn" onclick="vpToggleInvert()" data-tip="Invert colors (useful for finding hidden detail)">Invert</button>
+        <button class="vp-btn" onclick="vpResetFilters()" data-tip="Reset all adjustments to default">Reset</button>
+      </div>
+    </div>
+  </div>`;
+}
+h+=`<div style="display:flex;gap:12px;margin:8px 0;font-size:13px;color:var(--fg2);flex-wrap:wrap"><span>${r.media_type} &bull; ${fmtSize(r.file_size)} &bull; ${r.width}x${r.height}</span>`;
+if(r.duration)h+=`<span>Duration: ${fmtDur(r.duration)}</span>`;if(r.fps)h+=`<span>${r.fps} fps</span>`;if(r.codec)h+=`<span>Codec: ${r.codec}</span>`;h+='</div>';
+if(r.stripping_detected){h+='<div class="strip-warn">&#9888; Metadata anomalies detected<br>';(r.stripping_indicators||[]).forEach(i=>h+='&bull; '+i+'<br>');h+='</div>';}
+if(r.frames&&r.frames.length){h+='<h3 style="margin-top:12px" data-tip="Sample frames extracted at even intervals throughout the video">Extracted Frames</h3><div class="frame-grid">';r.frames.forEach(f=>{const ts=Math.floor(f.timestamp_sec/60)+':'+Math.floor(f.timestamp_sec%60).toString().padStart(2,'0');h+=`<div><img src="/frames/${f.file_path}" onclick="window.open('/frames/${f.file_path}')"><div class="frame-ts">${ts}${f.phash?' &bull; '+f.phash.substring(0,8):''}</div></div>`;});h+='</div>';}
+h+='<h3 style="margin-top:12px">Hashes</h3><div class="hash-grid">';['md5','sha256','phash','dhash'].forEach(k=>{if(r[k])h+=`<div class="hash-item"><div class="hl">${k.toUpperCase()}</div><div class="hv">${r[k]}</div></div>`;});h+='</div>';
+if(r.camera_make||r.camera_model)h+=`<p style="margin-top:12px;font-size:13px">Camera: <b>${r.camera_make} ${r.camera_model}</b></p>`;
+if(r.original_date||r.creation_date)h+=`<p style="font-size:13px">Date: <b>${r.original_date||r.creation_date}</b></p>`;
+if(r.has_gps)h+=`<p style="font-size:13px">GPS: <b style="font-family:var(--mono)">${r.gps_lat?.toFixed(6)}, ${r.gps_lon?.toFixed(6)}</b> <a href="https://www.google.com/maps?q=${r.gps_lat},${r.gps_lon}" target="_blank" style="color:var(--accent)">Map &#8599;</a></p>`;
+if(r.audio_codec)h+=`<p style="font-size:13px">Audio: ${r.audio_codec}${r.audio_channels?' &bull; '+r.audio_channels+'ch':''}${r.audio_sample_rate?' &bull; '+r.audio_sample_rate+'Hz':''}</p>`;
+h+=`<div class="fr" style="margin-top:16px"><div class="fg"><label>Suspect</label><select class="fi" onchange="updateEvField(${id},'suspect_id',this.value||null)"><option value="">None</option>${suspects.map(s=>`<option value="${s.id}"${s.id===r.suspect_id?' selected':''}>${s.name}</option>`).join('')}</select></div><div class="fg"><label>Tags</label><input class="fi" value="${r.tags||''}" onchange="updateEvField(${id},'tags',this.value)"></div></div><div class="fg"><label>Notes</label><textarea class="fi" rows="2" onchange="updateEvField(${id},'notes',this.value)">${r.notes||''}</textarea></div>`;
+document.getElementById('evDetailContent').innerHTML=h;openModal('evDetailModal');if(r.media_type==='video')setTimeout(vpInit,100);if(r.media_type==='image')setTimeout(vpInitImg,100);}
+async function updateEvField(id,f,v){await fetch(`/api/evidence/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[f]:v})});toast('Updated');}
+async function deleteEvidence(id){if(!confirm('Delete this evidence item? This cannot be undone.'))return;await fetch(`/api/evidence/${id}`,{method:'DELETE'});toast('Deleted');loadEvidence();}
+
+// =====================================================================
+// FORENSIC VIDEO PLAYER
+// =====================================================================
+let vpInverted=false, vpCurrentZoom=1;
+
+function vpInit(){
+  const v=document.getElementById('vpVideo');
+  if(!v)return;
+  v.addEventListener('loadedmetadata',()=>{
+    const seek=document.getElementById('vpSeek');
+    if(seek)seek.max=Math.floor(v.duration*100);
+    vpUpdateTime();
+    // Set video to fill viewport width
+    const vp=document.getElementById('vpViewport');
+    if(vp)v.style.width=vp.clientWidth+'px';
+  });
+  v.addEventListener('timeupdate',vpUpdateTime);
+  v.addEventListener('ended',()=>{const btn=document.getElementById('vpPlayBtn');if(btn)btn.innerHTML='&#9654; Play';});
+  // Scroll to zoom
+  const vp=document.getElementById('vpViewport');
+  if(vp){
+    vp.addEventListener('wheel',(e)=>{
+      e.preventDefault();
+      const delta=e.deltaY>0?-0.2:0.2;
+      vpZoom(Math.max(0.1,vpCurrentZoom+delta*vpCurrentZoom));
+    },{passive:false});
+    // Pan with drag
+    let dragging=false,startX=0,startY=0,scrollL=0,scrollT=0;
+    vp.addEventListener('mousedown',(e)=>{dragging=true;startX=e.clientX;startY=e.clientY;scrollL=vp.scrollLeft;scrollT=vp.scrollTop;v.style.cursor='grabbing';});
+    vp.addEventListener('mousemove',(e)=>{if(!dragging)return;vp.scrollLeft=scrollL-(e.clientX-startX);vp.scrollTop=scrollT-(e.clientY-startY);});
+    vp.addEventListener('mouseup',()=>{dragging=false;v.style.cursor='grab';});
+    vp.addEventListener('mouseleave',()=>{dragging=false;v.style.cursor='grab';});
+  }
+  vpResetFilters();
+}
+
+function vpPlay(){
+  const v=document.getElementById('vpVideo');if(!v)return;
+  const btn=document.getElementById('vpPlayBtn');
+  if(v.paused){v.play();if(btn)btn.innerHTML='&#10074;&#10074; Pause';}
+  else{v.pause();if(btn)btn.innerHTML='&#9654; Play';}
+}
+
+function vpStep(dir){
+  const v=document.getElementById('vpVideo');if(!v)return;
+  v.pause();
+  const fps=30; // approximate
+  v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+dir/fps));
+}
+
+function vpSeekTo(val){
+  const v=document.getElementById('vpVideo');if(!v||!v.duration)return;
+  v.currentTime=(val/100)*v.duration;
+}
+
+function vpUpdateTime(){
+  const v=document.getElementById('vpVideo');if(!v)return;
+  const cur=v.currentTime||0,dur=v.duration||0;
+  const fmt=(s)=>{const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0');};
+  const el=document.getElementById('vpTime');if(el)el.textContent=fmt(cur)+' / '+fmt(dur);
+  const seek=document.getElementById('vpSeek');
+  if(seek&&dur)seek.value=Math.floor((cur/dur)*100);
+}
+
+function vpZoom(level){
+  vpCurrentZoom=Math.max(0.1,Math.min(32,level));
+  const v=document.getElementById('vpVideo');if(!v)return;
+  const vp=document.getElementById('vpViewport');if(!vp)return;
+  const baseW=vp.clientWidth;
+  v.style.width=(baseW*vpCurrentZoom)+'px';
+  v.style.height='auto';
+  const slider=document.getElementById('vpZoomSlider');if(slider)slider.value=Math.round(vpCurrentZoom*100);
+  const val=document.getElementById('vpZoomVal');if(val)val.textContent=vpCurrentZoom.toFixed(1)+'x';
+}
+
+function vpApplyFilters(){
+  const v=document.getElementById('vpVideo');if(!v)return;
+  const bright=document.getElementById('vpBright')?.value||100;
+  const contrast=document.getElementById('vpContrast')?.value||100;
+  const sat=document.getElementById('vpSat')?.value||100;
+  const hue=document.getElementById('vpHue')?.value||0;
+  const gamma=document.getElementById('vpGamma')?.value||100;
+  const gammaVal=(gamma/100).toFixed(2);
+  // Update display values
+  const bv=document.getElementById('vpBrightVal');if(bv)bv.textContent=bright;
+  const cv=document.getElementById('vpContrastVal');if(cv)cv.textContent=contrast;
+  const sv=document.getElementById('vpSatVal');if(sv)sv.textContent=sat;
+  const hv=document.getElementById('vpHueVal');if(hv)hv.textContent=hue+'°';
+  const gv=document.getElementById('vpGammaVal');if(gv)gv.textContent=gammaVal;
+  // Gamma via brightness/contrast approximation (CSS doesn't have native gamma)
+  // We simulate gamma with a combination of brightness adjustment
+  const gammaBright=Math.pow(bright/100, 1/(gamma/100))*100;
+  let filter=`brightness(${gammaBright}%) contrast(${contrast}%) saturate(${sat}%) hue-rotate(${hue}deg)`;
+  if(vpInverted)filter+=' invert(1)';
+  v.style.filter=filter;
+  // Also apply to image if viewing an image
+  const img=document.getElementById('evDetailImg');
+  if(img)img.style.filter=filter;
+}
+
+function vpToggleInvert(){
+  vpInverted=!vpInverted;
+  const btn=document.getElementById('vpInvertBtn');
+  if(btn)btn.classList.toggle('active',vpInverted);
+  vpApplyFilters();
+}
+
+function vpResetFilters(){
+  vpInverted=false;vpCurrentZoom=1;
+  const ids={vpBright:100,vpContrast:100,vpSat:100,vpHue:0,vpGamma:100};
+  for(const[id,val]of Object.entries(ids)){const el=document.getElementById(id);if(el)el.value=val;}
+  const btn=document.getElementById('vpInvertBtn');if(btn)btn.classList.remove('active');
+  vpApplyFilters();
+  const v=document.getElementById('vpVideo');
+  const img=document.getElementById('evDetailImg');
+  const vp=document.getElementById('vpViewport');
+  if(v&&vp)v.style.width=vp.clientWidth+'px';
+  if(img&&vp){img.style.width='100%';img.style.maxWidth='100%';}
+  const slider=document.getElementById('vpZoomSlider');if(slider)slider.value=100;
+  const zv=document.getElementById('vpZoomVal');if(zv)zv.textContent='1.0x';
+}
+
+function vpInitImg(){
+  const img=document.getElementById('evDetailImg');if(!img)return;
+  const vp=document.getElementById('vpViewport');if(!vp)return;
+  // Scroll to zoom on images
+  vp.addEventListener('wheel',(e)=>{
+    e.preventDefault();
+    const delta=e.deltaY>0?-0.2:0.2;
+    vpZoomImg(Math.max(0.1,vpCurrentZoom+delta*vpCurrentZoom));
+  },{passive:false});
+  // Pan with drag
+  let dragging=false,startX=0,startY=0,scrollL=0,scrollT=0;
+  vp.addEventListener('mousedown',(e)=>{dragging=true;startX=e.clientX;startY=e.clientY;scrollL=vp.scrollLeft;scrollT=vp.scrollTop;});
+  vp.addEventListener('mousemove',(e)=>{if(!dragging)return;vp.scrollLeft=scrollL-(e.clientX-startX);vp.scrollTop=scrollT-(e.clientY-startY);});
+  vp.addEventListener('mouseup',()=>dragging=false);
+  vp.addEventListener('mouseleave',()=>dragging=false);
+  vpResetFilters();
+}
+
+function vpZoomImg(level){
+  vpCurrentZoom=Math.max(0.1,Math.min(32,level));
+  const img=document.getElementById('evDetailImg');if(!img)return;
+  const vp=document.getElementById('vpViewport');if(!vp)return;
+  const baseW=vp.clientWidth;
+  img.style.width=(baseW*vpCurrentZoom)+'px';
+  img.style.maxWidth='none';
+  const slider=document.getElementById('vpZoomSlider');if(slider)slider.value=Math.round(vpCurrentZoom*100);
+  const val=document.getElementById('vpZoomVal');if(val)val.textContent=vpCurrentZoom.toFixed(1)+'x';
+}
+
+async function loadTimeline(){const r=await fetch('/api/timeline').then(r=>r.json());let h='';if(!r.length){h='<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No dated evidence yet. Import files with timestamps to see them here.</div>';}else{r.forEach(e=>{const dt=e.original_date||e.creation_date||e.modify_date;const sus=suspects.find(s=>s.id===e.suspect_id);h+=`<div class="tl-item" onclick="showEvDetail(${e.id})"><div class="tl-date">${dt}</div><div class="tl-name">${e.file_name}</div><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:var(--bg4);color:var(--fg2)">${e.media_type}${e.duration?' &bull; '+fmtDur(e.duration):''}</span>${e.has_gps?'<span style="color:var(--green);font-size:11px;margin-left:4px">GPS</span>':''}${e.stripping_detected?'<span style="color:var(--red);font-size:11px;margin-left:4px">&#9888;</span>':''}${sus?'<span class="tag" style="margin-left:4px">'+sus.name+'</span>':''}</div>`;});}document.getElementById('timelineContent').innerHTML=h;}
+
+async function loadMap(){const data=await fetch('/api/gps').then(r=>r.json());const c=document.getElementById('mapContainer');if(leafletMap){leafletMap.remove();leafletMap=null;}leafletMap=L.map(c).setView([20,0],2);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(leafletMap);data.forEach(e=>{L.marker([e.gps_lat,e.gps_lon]).addTo(leafletMap).bindPopup(`<b>${e.file_name}</b><br>${e.camera_make||''} ${e.camera_model||''}<br>${e.original_date||''}`);});if(data.length)leafletMap.fitBounds(L.latLngBounds(data.map(e=>[e.gps_lat,e.gps_lon])),{padding:[30,30]});setTimeout(()=>leafletMap.invalidateSize(),200);}
+
+async function loadSuspects(){suspects=await fetch('/api/suspects').then(r=>r.json());let h='';suspects.forEach(s=>{h+=`<div class="suspect-card" onclick="showSuspectDetail(${s.id})"><div style="display:flex;justify-content:space-between;align-items:center"><h4>${s.name}</h4><span class="threat-badge threat-${s.threat_level}">${s.threat_level}</span></div>${s.aliases?`<div class="aliases">aka ${s.aliases}</div>`:''}<div class="meta"><span>&#128206; <span class="num">${s.evidence_count}</span> evidence</span><span>${s.platform||''}</span></div></div>`;});document.getElementById('suspectGrid').innerHTML=h||'<div style="color:var(--fg3);padding:20px">No suspects yet. Click "+ Add Suspect" to create one.</div>';}
+function resetSuspectForm(){document.getElementById('suspectModalTitle').textContent='Add Suspect';document.getElementById('suspectEditId').value='';['susName','susAliases','susPlatform','susNotes'].forEach(i=>document.getElementById(i).value='');document.getElementById('susThreat').value='unknown';document.getElementById('susIdentifiers').innerHTML='<div class="fg" style="margin-bottom:6px"><label>Identifiers</label></div>';document.getElementById('btnDelSuspect').style.display='none';}
+function addIdentField(t='',v=''){const d=document.createElement('div');d.className='fr';d.style.marginBottom='6px';d.innerHTML=`<div class="fg" style="max-width:140px"><select class="fi ident-type"><option value="telegram"${t==='telegram'?' selected':''}>Telegram</option><option value="discord"${t==='discord'?' selected':''}>Discord</option><option value="email"${t==='email'?' selected':''}>Email</option><option value="phone"${t==='phone'?' selected':''}>Phone</option><option value="crypto"${t==='crypto'?' selected':''}>Crypto</option><option value="username"${t==='username'?' selected':''}>Username</option><option value="other"${t==='other'?' selected':''}>Other</option></select></div><div class="fg"><input class="fi ident-val" value="${v}" placeholder="Value"></div><button class="btn bd btn-sm" onclick="this.parentElement.remove()" style="align-self:flex-end;margin-bottom:4px">&times;</button>`;document.getElementById('susIdentifiers').appendChild(d);}
+async function saveSuspect(){const eid=document.getElementById('suspectEditId').value;const ids=[];document.querySelectorAll('#susIdentifiers .fr').forEach(r=>{const t=r.querySelector('.ident-type')?.value,v=r.querySelector('.ident-val')?.value;if(t&&v)ids.push({type:t,value:v});});const data={name:document.getElementById('susName').value,aliases:document.getElementById('susAliases').value,platform:document.getElementById('susPlatform').value,notes:document.getElementById('susNotes').value,threat_level:document.getElementById('susThreat').value,status:'active',identifiers:ids};if(eid)await fetch(`/api/suspects/${eid}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});else await fetch('/api/suspects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});closeModal('suspectModal');loadSuspects();loadSuspectSelects();toast('Suspect saved!');}
+async function deleteSuspect(){const id=document.getElementById('suspectEditId').value;if(!id||!confirm('Delete this suspect? Their evidence will be unlinked but not deleted.'))return;await fetch(`/api/suspects/${id}`,{method:'DELETE'});closeModal('suspectModal');loadSuspects();toast('Suspect deleted');}
+async function showSuspectDetail(id){const s=await fetch(`/api/suspects/${id}`).then(r=>r.json());let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>${s.name}</h3><div><span class="threat-badge threat-${s.threat_level}">${s.threat_level}</span><button class="btn bg btn-sm" style="margin-left:8px" onclick="closeModal('suspectDetailModal');editSuspect(${id})">Edit</button></div></div>`;if(s.aliases)h+=`<p style="color:var(--fg2);font-size:13px;margin-bottom:8px">Aliases: ${s.aliases}</p>`;if(s.platform)h+=`<p style="color:var(--fg2);font-size:13px;margin-bottom:8px">Platform: ${s.platform}</p>`;if(s.notes)h+=`<div class="card" style="font-size:13px;white-space:pre-wrap">${s.notes}</div>`;if(s.identifiers?.length){h+='<h3 style="margin-top:12px">Identifiers</h3>';s.identifiers.forEach(i=>{h+=`<div class="meta-field"><span class="mf-key">${i.id_type}</span><span class="mf-val">${i.id_value}</span></div>`;});}if(s.evidence?.length){h+=`<h3 style="margin-top:16px">Linked Evidence (${s.evidence.length})</h3>`;s.evidence.forEach(e=>{h+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer" onclick="closeModal('suspectDetailModal');showEvDetail(${e.id})"><span>${e.media_type==='video'?'&#127909;':'&#128247;'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.file_name}</span>${e.duration?'<span class="video-badge">'+fmtDur(e.duration)+'</span>':''}${e.has_gps?'<span style="color:var(--green)">GPS</span>':''}${e.stripping_detected?'<span style="color:var(--red)">&#9888;</span>':''}</div>`;});}document.getElementById('suspectDetailContent').innerHTML=h;openModal('suspectDetailModal');}
+async function editSuspect(id){const s=await fetch(`/api/suspects/${id}`).then(r=>r.json());document.getElementById('suspectModalTitle').textContent='Edit Suspect';document.getElementById('suspectEditId').value=id;document.getElementById('susName').value=s.name;document.getElementById('susAliases').value=s.aliases||'';document.getElementById('susPlatform').value=s.platform||'';document.getElementById('susNotes').value=s.notes||'';document.getElementById('susThreat').value=s.threat_level||'unknown';document.getElementById('susIdentifiers').innerHTML='<div class="fg" style="margin-bottom:6px"><label>Identifiers</label></div>';(s.identifiers||[]).forEach(i=>addIdentField(i.id_type,i.id_value));document.getElementById('btnDelSuspect').style.display='inline-flex';openModal('suspectModal');}
+
+async function loadCompareOptions(){const r=await fetch('/api/evidence?per_page=500').then(r=>r.json());const o=r.items.map(e=>`<option value="${e.id}">${e.file_name} (${e.media_type})</option>`).join('');document.getElementById('compareA').innerHTML=o;document.getElementById('compareB').innerHTML=o;}
+async function runCompare(){const a=document.getElementById('compareA').value,b=document.getElementById('compareB').value;if(!a||!b||a===b)return toast('Pick two different items','error');const r=await fetch('/api/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_a:+a,id_b:+b})}).then(r=>r.json());let h='<div style="display:flex;gap:16px;margin-top:16px">';[['A',r.a],['B',r.b]].forEach(([l,e])=>{h+=`<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px"><h3>${l}: ${e.file_name}</h3><p style="font-size:12px;color:var(--fg2)">${e.media_type} &bull; ${fmtSize(e.file_size)} &bull; ${e.width}x${e.height}</p><p style="font-size:12px;color:var(--fg2)">Duration: ${fmtDur(e.duration)} &bull; Codec: ${e.codec||'N/A'}</p><p style="font-size:12px;color:var(--fg2)">Camera: ${(e.camera_make+' '+e.camera_model).trim()||'Unknown'}</p><p style="font-size:12px;color:var(--fg2)">Date: ${e.original_date||e.creation_date||'N/A'}</p></div>`;});h+='</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">';h+=`<div class="compare-result ${r.hash_match?'compare-match':'compare-diff'}">Exact Match: ${r.hash_match?'YES':'No'}</div>`;h+=`<div class="compare-result ${r.hash_similarity>80?'compare-match':(r.hash_similarity>40?'compare-partial':'compare-diff')}">Visual Similarity: ${r.hash_similarity}%</div>`;h+=`<div class="compare-result ${r.same_camera?'compare-match':'compare-diff'}">Same Camera: ${r.same_camera?'YES':'No'}</div>`;h+=`<div class="compare-result ${r.same_codec?'compare-match':'compare-diff'}">Same Codec: ${r.same_codec?'YES':'No'}</div>`;h+=`<div class="compare-result ${r.same_resolution?'compare-match':'compare-diff'}">Same Resolution: ${r.same_resolution?'YES':'No'}</div>`;h+=`<div class="compare-result ${r.same_location?'compare-match':'compare-diff'}">Same Location: ${r.same_location?'YES':'No'}</div>`;h+='</div>';document.getElementById('compareResult').innerHTML=h;}
+
+async function findDuplicates(){toast('Scanning all evidence for duplicates...');const r=await fetch('/api/duplicates').then(r=>r.json());let h='';if(r.exact.length){h+='<div class="card"><h3 style="color:var(--red)">&#9888; Exact Duplicates (identical files)</h3><table class="mt"><thead><tr><th>SHA-256</th><th>Count</th><th>Files</th></tr></thead><tbody>';r.exact.forEach(d=>{h+=`<tr><td style="font-family:var(--mono);font-size:11px">${d.sha256.substring(0,24)}...</td><td>${d.count}</td><td>${d.names}</td></tr>`;});h+='</tbody></table></div>';}if(r.near.length){h+='<div class="card"><h3 style="color:var(--orange)">&#128269; Near Duplicates (visually similar)</h3><table class="mt"><thead><tr><th>File A</th><th>File B</th><th>Similarity</th></tr></thead><tbody>';r.near.forEach(d=>{h+=`<tr><td>${d.name_a}</td><td>${d.name_b}</td><td><b>${d.similarity}%</b></td></tr>`;});h+='</tbody></table></div>';}if(!r.exact.length&&!r.near.length)h='<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No duplicates found. All your evidence files are unique.</div>';document.getElementById('dupResults').innerHTML=h;}
+async function hashLookup(){const h=document.getElementById('hashInput').value.trim();if(!h)return toast('Paste a hash first','error');const r=await fetch('/api/hash_lookup?hash='+encodeURIComponent(h)).then(r=>r.json());let html='';if(r.length){html='<div class="card"><h3>&#10003; Found '+r.length+' match'+(r.length>1?'es':'')+'</h3><table class="mt"><thead><tr><th>File</th><th>Type</th><th>Matched On</th></tr></thead><tbody>';r.forEach(e=>{let m=[];if(e.md5===h)m.push('MD5');if(e.sha256===h)m.push('SHA-256');if(e.phash===h)m.push('pHash');html+=`<tr onclick="showEvDetail(${e.id})"><td>${e.file_name}</td><td>${e.media_type}</td><td>${m.join(', ')}</td></tr>`;});html+='</tbody></table></div>';}else html='<div class="card" style="text-align:center;color:var(--fg3);padding:24px">No matches found for that hash.</div>';document.getElementById('hashResults').innerHTML=html;}
+function exportJSON(){const s=document.getElementById('exportJsonSuspect').value;window.open('/api/export/json'+(s?'?suspect_id='+s:''));}
+function exportPDF(){const s=document.getElementById('exportPdfSuspect').value;window.open('/api/export/pdf'+(s?'?suspect_id='+s:''));}
+function exportCSV(){const s=document.getElementById('exportCsvSuspect').value;window.open('/api/export/csv'+(s?'?suspect_id='+s:''));}
+function exportHTML(){const s=document.getElementById('exportHtmlSuspect').value;window.open('/api/export/html'+(s?'?suspect_id='+s:''));}
+function exportMarkdown(){const s=document.getElementById('exportMdSuspect').value;window.open('/api/export/markdown'+(s?'?suspect_id='+s:''));}
+
+// Import
+const importDrop=document.getElementById('importDrop');
+if(importDrop){
+  importDrop.addEventListener('dragover',e=>{e.preventDefault();importDrop.classList.add('dragover');});
+  importDrop.addEventListener('dragleave',()=>importDrop.classList.remove('dragover'));
+  importDrop.addEventListener('drop',e=>{e.preventDefault();importDrop.classList.remove('dragover');if(e.dataTransfer.files.length)importPalimpsest(e.dataTransfer.files[0]);});
+}
+async function importPalimpsest(file){
+  if(!file)return;
+  if(!file.name.endsWith('.json'))return toast('Please select a Palimpsest JSON export file','error');
+  toast('Importing...');
+  const fd=new FormData();fd.append('file',file);
+  const r=await fetch('/api/import/palimpsest',{method:'POST',body:fd}).then(r=>r.json());
+  if(r.error){toast(r.error,'error');return;}
+  document.getElementById('importResult').innerHTML=`<div class="strip-ok">${r.message}</div>`;
+  toast(r.message);
+  loadDashboard();
+}
+// =====================================================================
+// FORENSIC SUITE
+// =====================================================================
+async function loadForensicTargets(){
+  const r=await fetch('/api/evidence?per_page=500').then(r=>r.json());
+  const o=r.items.map(e=>`<option value="${e.id}">${e.file_name} (${e.media_type})</option>`).join('');
+  const sel=document.getElementById('forensicTarget');
+  if(sel)sel.innerHTML=o;
+}
+
+async function runForensicSingle(){
+  const sel=document.getElementById('forensicTarget');
+  if(!sel||!sel.value)return toast('Select an evidence item first','error');
+  const eid=sel.value;
+  toast('Running forensic analysis... this may take a minute');
+  const r=await fetch(`/api/forensics/run/${eid}`,{method:'POST'}).then(r=>r.json());
+  if(r.error){toast(r.error,'error');return;}
+  renderForensicResults(r);
+  toast(`Forensics complete! ${r.total_flags} findings.`);
+}
+
+async function runForensicBatch(){
+  toast('Running batch forensics on all unanalyzed evidence...');
+  const r=await fetch('/api/forensics/batch',{method:'POST'}).then(r=>r.json());
+  document.getElementById('forensicBatchResult').innerHTML=`<div class="strip-ok">Analyzed ${r.analyzed} files. Run Scene Matching or Audio Matching to find connections.</div>`;
+  toast(`Batch complete: ${r.analyzed} files analyzed`);
+}
+
+function renderForensicResults(r){
+  const el=document.getElementById('forensicSingleResult');
+  let h='';
+  const results=r.results||{};
+
+  // Collect all flags
+  const allFlags=r.flags||[];
+  if(allFlags.length){
+    h+='<div class="card"><h3 style="color:var(--red)">&#9888; Findings ('+allFlags.length+')</h3>';
+    allFlags.forEach(f=>h+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--fg)">&bull; ${f}</div>`);
+    h+='</div>';
+  }else{
+    h+='<div class="strip-ok">No red flags found. File appears clean.</div>';
+  }
+
+  // Scene
+  if(results.scene){
+    const s=results.scene;
+    h+='<div class="card"><h3 data-tip="Color, brightness, and texture fingerprint of the scene">&#127968; Scene Analysis</h3>';
+    if(s.dominant_colors&&s.dominant_colors.length){
+      h+='<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center"><span style="font-size:12px;color:var(--fg2)">Dominant colors:</span>';
+      s.dominant_colors.forEach(c=>{h+=`<div style="width:28px;height:28px;border-radius:4px;background:rgb(${c},${c},${c});border:1px solid var(--border)" data-tip="Grayscale intensity: ${c}"></div>`;});
+      h+='</div>';
+    }
+    h+=`<div class="meta-field"><span class="mf-key">Average Brightness</span><span class="mf-val">${(s.brightness_avg||0).toFixed(1)} / 255</span></div>`;
+    h+=`<div class="meta-field"><span class="mf-key">Edge Density</span><span class="mf-val">${((s.edge_density||0)*100).toFixed(1)}%</span></div>`;
+    if(s.texture_hash)h+=`<div class="meta-field"><span class="mf-key">Texture Hash</span><span class="mf-val" style="font-size:11px">${s.texture_hash}</span></div>`;
+    h+='</div>';
+  }
+
+  // Watermark
+  if(results.watermark){
+    const w=results.watermark;
+    h+='<div class="card"><h3 data-tip="Detects channel stamps, bot watermarks, and redistribution marks">&#128204; Watermark/Overlay Detection</h3>';
+    if(w.has_overlay){
+      h+='<div class="strip-warn">Overlay detected!</div>';
+      w.overlay_regions.forEach(r=>{
+        h+=`<div class="meta-field"><span class="mf-key">${r.position.replace('_',' ')}</span><span class="mf-val">Confidence: ${r.confidence}% | Consistency: ${r.consistency}%</span></div>`;
+      });
+    }else{
+      h+='<div style="color:var(--fg3);font-size:13px;padding:8px 0">No consistent overlays detected in standard positions.</div>';
+    }
+    h+='</div>';
+  }
+
+  // Encoding
+  if(results.encoding){
+    const e=results.encoding;
+    h+='<div class="card"><h3 data-tip="Estimates whether this is an original recording or a re-encoded copy">&#128256; Encoding Chain Analysis</h3>';
+    const genColor=e.generation_estimate?.includes('original')||e.generation_estimate?.includes('1st')?'var(--green)':
+                   e.generation_estimate?.includes('2nd')?'var(--yellow)':'var(--red)';
+    h+=`<div style="font-size:15px;font-weight:600;color:${genColor};margin-bottom:12px">${e.generation_estimate||'unknown'}</div>`;
+    const d=e.details||{};
+    if(d.resolution)h+=`<div class="meta-field"><span class="mf-key">Resolution</span><span class="mf-val">${d.resolution}</span></div>`;
+    if(d.fps)h+=`<div class="meta-field"><span class="mf-key">Frame Rate</span><span class="mf-val">${d.fps} fps</span></div>`;
+    if(d.codec)h+=`<div class="meta-field"><span class="mf-key">Codec</span><span class="mf-val">${d.codec}</span></div>`;
+    if(d.bitrate_human)h+=`<div class="meta-field"><span class="mf-key">Bitrate</span><span class="mf-val">${d.bitrate_human}</span></div>`;
+    if(d.bits_per_pixel_frame!==undefined)h+=`<div class="meta-field"><span class="mf-key">Bits/Pixel/Frame</span><span class="mf-val">${d.bits_per_pixel_frame}</span></div>`;
+    if(d.blockiness!==undefined)h+=`<div class="meta-field"><span class="mf-key">Blockiness Score</span><span class="mf-val">${d.blockiness}</span></div>`;
+    h+='</div>';
+  }
+
+  // Screen recording
+  if(results.screen_recording){
+    const sr=results.screen_recording;
+    h+='<div class="card"><h3 data-tip="Detects if someone screen-recorded their phone instead of sharing the original file">&#128241; Screen Recording Detection</h3>';
+    if(sr.is_screen_recording){
+      h+=`<div class="strip-warn">Screen recording detected (${sr.confidence}% confidence)</div>`;
+    }else{
+      h+=`<div style="color:var(--green);font-size:13px;padding:8px 0">Does not appear to be a screen recording (${sr.confidence}% screen-rec score)</div>`;
+    }
+    if(sr.indicators&&sr.indicators.length){
+      h+='<div style="margin-top:8px">';
+      sr.indicators.forEach(i=>h+=`<div style="font-size:12px;color:var(--fg2);padding:3px 0">&bull; ${i}</div>`);
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+
+  // Lighting
+  if(results.lighting){
+    const l=results.lighting;
+    h+='<div class="card"><h3 data-tip="Natural vs artificial light, color temperature, brightness patterns">&#128161; Lighting Analysis</h3>';
+    h+=`<div class="meta-field"><span class="mf-key">Lighting Type</span><span class="mf-val">${l.lighting_type}</span></div>`;
+    h+=`<div class="meta-field"><span class="mf-key">Color Temperature</span><span class="mf-val">${l.color_temp}</span></div>`;
+    const ld=l.details||{};
+    if(ld.avg_brightness!==undefined)h+=`<div class="meta-field"><span class="mf-key">Avg Brightness</span><span class="mf-val">${ld.avg_brightness} / 255</span></div>`;
+    if(ld.brightness_variance!==undefined)h+=`<div class="meta-field"><span class="mf-key">Brightness Variance</span><span class="mf-val">${ld.brightness_variance}</span></div>`;
+    if(ld.blue_red_ratio!==undefined)h+=`<div class="meta-field"><span class="mf-key">Blue/Red Ratio</span><span class="mf-val">${ld.blue_red_ratio}</span></div>`;
+    // Brightness timeline
+    if(l.brightness_over_time&&l.brightness_over_time.length>1){
+      h+='<div style="margin-top:12px"><div style="font-size:12px;color:var(--fg3);margin-bottom:4px">Brightness over time:</div>';
+      h+='<div style="display:flex;align-items:flex-end;gap:2px;height:60px">';
+      const maxB=Math.max(...l.brightness_over_time.map(p=>p.b),1);
+      l.brightness_over_time.forEach(p=>{
+        const pct=(p.b/maxB)*100;
+        const warm=p.b>170?'var(--yellow)':p.b<50?'var(--purple)':'var(--accent)';
+        h+=`<div style="flex:1;background:${warm};border-radius:2px 2px 0 0;height:${pct}%" data-tip="${p.t}s: brightness ${p.b.toFixed(0)}"></div>`;
+      });
+      h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  // Audio
+  if(results.audio){
+    const a=results.audio;
+    h+='<div class="card"><h3 data-tip="Audio track analysis: spectral fingerprint, silence detection, energy profile">&#127925; Audio Analysis</h3>';
+    if(!a.has_audio){
+      h+='<div style="color:var(--fg3);font-size:13px;padding:8px 0">No audio track found or ffmpeg unavailable.</div>';
+    }else{
+      h+=`<div class="meta-field"><span class="mf-key">Audio Duration</span><span class="mf-val">${a.duration}s</span></div>`;
+      const ad=a.details||{};
+      if(ad.sample_rate)h+=`<div class="meta-field"><span class="mf-key">Sample Rate</span><span class="mf-val">${ad.sample_rate} Hz</span></div>`;
+      if(ad.silence_percent!==undefined)h+=`<div class="meta-field"><span class="mf-key">Silence</span><span class="mf-val">${ad.silence_percent}%</span></div>`;
+      if(a.fingerprint_hash)h+=`<div class="meta-field"><span class="mf-key">Audio Fingerprint</span><span class="mf-val" style="font-size:11px">${a.fingerprint_hash}</span></div>`;
+      const sf=a.spectral_features||{};
+      if(sf.centroid_hz)h+=`<div class="meta-field"><span class="mf-key">Spectral Centroid</span><span class="mf-val">${sf.centroid_hz} Hz</span></div>`;
+      // Energy timeline
+      if(ad.energy_profile&&ad.energy_profile.length>1){
+        h+='<div style="margin-top:12px"><div style="font-size:12px;color:var(--fg3);margin-bottom:4px">Audio energy over time:</div>';
+        h+='<div style="display:flex;align-items:flex-end;gap:1px;height:50px">';
+        const maxE=Math.max(...ad.energy_profile,0.001);
+        ad.energy_profile.forEach((e,i)=>{
+          const pct=(e/maxE)*100;
+          h+=`<div style="flex:1;background:var(--green);border-radius:1px 1px 0 0;height:${pct}%;min-height:1px" data-tip="${i}s: energy ${e.toFixed(4)}"></div>`;
+        });
+        h+='</div></div>';
+      }
+    }
+    h+='</div>';
+  }
+
+  el.innerHTML=h;
+}
+
+async function loadSceneMatches(){
+  toast('Comparing scene fingerprints across your library...');
+  const r=await fetch('/api/forensics/scene_matches').then(r=>r.json());
+  let h='';
+  if(r.length){
+    h+='<div class="card"><h3 style="color:var(--orange)">&#127968; Potential Location Matches ('+r.length+')</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">These files have similar environmental characteristics. They may have been filmed in the same location.</p>';
+    h+='<table class="mt"><thead><tr><th>File A</th><th>File B</th><th>Scene Similarity</th></tr></thead><tbody>';
+    r.forEach(m=>{
+      const color=m.similarity>80?'var(--green)':m.similarity>70?'var(--yellow)':'var(--orange)';
+      h+=`<tr><td style="cursor:pointer" onclick="showEvDetail(${m.id_a})">${m.name_a}</td><td style="cursor:pointer" onclick="showEvDetail(${m.id_b})">${m.name_b}</td><td><b style="color:${color}">${m.similarity}%</b></td></tr>`;
+    });
+    h+='</tbody></table></div>';
+  }else{
+    h='<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No scene matches found. Make sure you\'ve run forensics on your evidence first (Forensic Suite > Batch Forensics).</div>';
+  }
+  document.getElementById('sceneMatchResults').innerHTML=h;
+}
+
+async function loadAudioMatches(){
+  toast('Comparing audio fingerprints...');
+  const r=await fetch('/api/forensics/audio_matches').then(r=>r.json());
+  let h='';
+  if(r.length){
+    h+='<div class="card"><h3 style="color:var(--green)">&#127925; Audio Environment Matches ('+r.length+')</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">These files have matching audio fingerprints. They may have been recorded in the same environment.</p>';
+    h+='<table class="mt"><thead><tr><th>File A</th><th>File B</th><th>Match Type</th></tr></thead><tbody>';
+    r.forEach(m=>{
+      h+=`<tr><td style="cursor:pointer" onclick="showEvDetail(${m.id_a})">${m.name_a}</td><td style="cursor:pointer" onclick="showEvDetail(${m.id_b})">${m.name_b}</td><td style="color:var(--green)">${m.match}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+  }else{
+    h='<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No audio matches found. Make sure you\'ve run forensics first and that ffmpeg is installed for audio extraction.</div>';
+  }
+  document.getElementById('audioMatchResults').innerHTML=h;
+}
+
+async function checkDeps(){const r=await fetch('/api/info').then(r=>r.json());alert(`Palimpsest v${r.version}\n\nPillow (image EXIF): ${r.pil?'OK':'MISSING'}\nimagehash (perceptual hashing): ${r.imagehash?'OK':'MISSING'}\nOpenCV (video analysis): ${r.cv2?'OK':'MISSING'}\nhachoir (video containers): ${r.hachoir?'OK':'MISSING'}\nnumpy (forensics): ${r.numpy?'OK':'MISSING'}\nscipy (audio analysis): ${r.scipy?'OK':'MISSING'}\nffmpeg (audio extraction): ${r.ffmpeg?'OK':'NOT FOUND'}\nreportlab (PDF export): ${r.reportlab?'OK':'MISSING'}`);}
+
+// First-run: offer tutorial
+loadDashboard();loadSuspectSelects();
+if(!localStorage.getItem('palimpsest_toured')){setTimeout(()=>{if(confirm('Welcome to Palimpsest! Want a quick walkthrough of the app?')){startTutorial();}localStorage.setItem('palimpsest_toured','1');},800);}
+</script>
+</body></html>

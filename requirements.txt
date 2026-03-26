@@ -1,0 +1,9 @@
+flask>=3.0
+Pillow>=10.0
+imagehash>=4.3
+opencv-python-headless>=4.8
+hachoir>=3.2
+numpy>=1.24
+scipy>=1.10
+reportlab>=4.0
+pyinstaller>=6.0
