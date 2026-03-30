@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """
-Palimpsest - Metadata Forensics Toolkit v2.1
+Palimpsest - Metadata Forensics Toolkit v4.0
 Video-first desktop application for analyzing metadata from
 photos and videos, managing suspects, and building evidence packages.
+
+v4.0: ENF (Electrical Network Frequency) analysis for geographic
+region detection, AI vision frame analysis (Claude/GPT/Gemini),
+batch metadata grouping for distribution chain mapping.
+
 Pure Python. No external DLLs. Single-user local tool.
 
 Part of the Project No More ecosystem.
 https://ephemeradev.net | https://github.com/ephemera02
 """
 
-import os, sys, json, hashlib, sqlite3, time, io, re, webbrowser, threading, struct, subprocess, shutil
+import os, sys, json, hashlib, sqlite3, time, io, re, webbrowser, threading, struct, subprocess, shutil, base64
 from datetime import datetime
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 try:
     import numpy as np
@@ -87,6 +94,10 @@ VIDEO_EXTS = {".mp4",".avi",".mov",".mkv",".wmv",".flv",".webm",".m4v",".3gp",".
 
 app = Flask(__name__, static_folder=None)
 # No file size limit. This is a local tool, your machine, your rules.
+
+# Limit concurrent background work (ffmpeg, frame extraction).
+# Without this, batch processing 100 videos spawns 100 ffmpeg processes simultaneously.
+BG_SEMAPHORE = threading.Semaphore(2)  # max 2 concurrent background jobs
 
 @contextmanager
 def get_db():
@@ -199,6 +210,126 @@ def init_forensic_db():
         """)
 init_forensic_db()
 
+def init_v4_db():
+    with get_db() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS enf_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_id INTEGER NOT NULL,
+            detected_freq REAL DEFAULT 0,
+            grid_region TEXT DEFAULT '',
+            confidence REAL DEFAULT 0,
+            enf_trace TEXT DEFAULT '[]',
+            source TEXT DEFAULT '',
+            flags TEXT DEFAULT '[]',
+            analyzed_at TEXT,
+            FOREIGN KEY (evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS ai_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_id INTEGER NOT NULL,
+            provider TEXT DEFAULT '',
+            model TEXT DEFAULT '',
+            frame_index INTEGER DEFAULT 0,
+            result_json TEXT DEFAULT '{}',
+            tokens_used INTEGER DEFAULT 0,
+            cost_estimate REAL DEFAULT 0,
+            analyzed_at TEXT,
+            FOREIGN KEY (evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS ai_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            provider TEXT DEFAULT 'anthropic',
+            api_key TEXT DEFAULT '',
+            model TEXT DEFAULT '',
+            custom_endpoint TEXT DEFAULT '',
+            default_prompt TEXT DEFAULT '',
+            total_tokens INTEGER DEFAULT 0,
+            total_cost REAL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS ocr_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_id INTEGER NOT NULL,
+            frame_index INTEGER DEFAULT 0,
+            detected_text TEXT DEFAULT '',
+            language TEXT DEFAULT '',
+            confidence REAL DEFAULT 0,
+            analyzed_at TEXT,
+            FOREIGN KEY (evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_enf_ev ON enf_results(evidence_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_ev ON ai_results(evidence_id);
+        CREATE INDEX IF NOT EXISTS idx_ocr_ev ON ocr_results(evidence_id);
+        """)
+        existing = conn.execute("SELECT id FROM ai_settings WHERE id=1").fetchone()
+        if not existing:
+            default_prompt = ("You are a forensic analyst examining video frames from an investigation. "
+                "Analyze this frame and return ONLY a JSON object (no markdown, no explanation) with these fields: "
+                "outlet_type (power outlet type visible: Type A/B/C/F/G/I or none), "
+                "visible_text (array of any readable text), "
+                "text_language (detected language of visible text), "
+                "room_features (description of flooring, walls, furniture), "
+                "lighting (fluorescent/incandescent/natural/LED), "
+                "vegetation (plants/trees visible through windows), "
+                "objects (notable objects, tools, animals), "
+                "environmental_clues (anything suggesting geographic region or time), "
+                "confidence (0-100 confidence in geographic indicators), "
+                "region_estimate (best guess at country/region)")
+            conn.execute("INSERT INTO ai_settings (id, provider, model, default_prompt) VALUES (1, 'anthropic', 'claude-sonnet-4-5-20250514', ?)",
+                (default_prompt,))
+init_v4_db()
+
+# AI provider configuration
+AI_PROVIDERS = {
+    "anthropic": {
+        "name": "Anthropic (Claude)",
+        "endpoint": "https://api.anthropic.com/v1/messages",
+        "models": [
+            {"id": "claude-sonnet-4-5-20250514", "name": "Claude Sonnet 4.5", "input_cost": 3.0, "output_cost": 15.0},
+            {"id": "claude-sonnet-4-6-20250725", "name": "Claude Sonnet 4.6", "input_cost": 3.0, "output_cost": 15.0},
+            {"id": "claude-opus-4-5-20250410", "name": "Claude Opus 4.5", "input_cost": 15.0, "output_cost": 75.0},
+            {"id": "claude-opus-4-6-20250710", "name": "Claude Opus 4.6", "input_cost": 15.0, "output_cost": 75.0},
+        ],
+        "format": "anthropic"
+    },
+    "openai": {
+        "name": "OpenAI (GPT)",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "models": [
+            {"id": "gpt-5.2", "name": "GPT-5.2", "input_cost": 2.5, "output_cost": 10.0},
+            {"id": "gpt-5.3", "name": "GPT-5.3", "input_cost": 5.0, "output_cost": 15.0},
+        ],
+        "format": "openai"
+    },
+    "google": {
+        "name": "Google (Gemini)",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        "models": [
+            {"id": "gemini-3.0-flash", "name": "Gemini 3.0 Flash", "input_cost": 0.075, "output_cost": 0.30},
+            {"id": "gemini-3.1-flash", "name": "Gemini 3.1 Flash", "input_cost": 0.075, "output_cost": 0.30},
+            {"id": "gemini-3.0-pro", "name": "Gemini 3.0 Pro", "input_cost": 1.25, "output_cost": 5.0},
+            {"id": "gemini-3.1-pro", "name": "Gemini 3.1 Pro", "input_cost": 1.25, "output_cost": 5.0},
+        ],
+        "format": "google"
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+        "models": [
+            {"id": "anthropic/claude-sonnet-4.5", "name": "Claude Sonnet 4.5 (via OR)", "input_cost": 3.0, "output_cost": 15.0},
+            {"id": "openai/gpt-5.2", "name": "GPT-5.2 (via OR)", "input_cost": 2.5, "output_cost": 10.0},
+            {"id": "google/gemini-3.0-flash", "name": "Gemini 3.0 Flash (via OR)", "input_cost": 0.075, "output_cost": 0.30},
+        ],
+        "format": "openai"
+    },
+    "custom": {
+        "name": "Custom Endpoint",
+        "endpoint": "",
+        "models": [{"id": "custom", "name": "Custom Model", "input_cost": 1.0, "output_cost": 1.0}],
+        "format": "openai"
+    }
+}
+
 # Check for ffmpeg (needed for audio extraction)
 # Look next to exe first (bundled), then PATH
 _ffmpeg_bundled = os.path.join(BASE_DIR, "ffmpeg.exe")
@@ -268,7 +399,7 @@ def compute_hashes(file_path):
     md5 = hashlib.md5(); sha = hashlib.sha256()
     with open(file_path, "rb") as f:
         while True:
-            chunk = f.read(131072)
+            chunk = f.read(1048576)
             if not chunk: break
             md5.update(chunk); sha.update(chunk)
     result["md5"] = md5.hexdigest(); result["sha256"] = sha.hexdigest()
@@ -285,7 +416,7 @@ def compute_video_hashes(file_path):
     md5 = hashlib.md5(); sha = hashlib.sha256()
     with open(file_path, "rb") as f:
         while True:
-            chunk = f.read(131072)
+            chunk = f.read(1048576)
             if not chunk: break
             md5.update(chunk); sha.update(chunk)
     result["md5"] = md5.hexdigest(); result["sha256"] = sha.hexdigest()
@@ -389,46 +520,66 @@ def extract_video_metadata(file_path):
               "duration":0,"fps":0,"codec":"","bitrate":0,"frame_count":0,
               "audio":{"codec":"","channels":0,"sample_rate":0},
               "stripping":{"detected":False,"indicators":[]},"raw":{},"has_exif":False}
-    if HAS_HACHOIR:
+    file_size = os.path.getsize(file_path)
+    # Skip hachoir for files over 500MB, it chokes on large files.
+    # cv2 gets the important stuff (dimensions, fps, codec, duration) from headers only.
+    use_hachoir = HAS_HACHOIR and file_size < 500 * 1024 * 1024
+    if use_hachoir:
         try:
-            parser=createParser(file_path)
-            if parser:
+            import concurrent.futures
+            def _parse_hachoir(fp):
+                parser=createParser(fp)
+                if not parser: return {}
                 meta=extractMetadata(parser)
-                if meta:
-                    raw={}
-                    for item in meta:
-                        for val in item.values: raw[item.key]=str(val.value) if hasattr(val,'value') else str(val)
-                    result["raw"]=raw
-                    if "duration" in raw: result["fields"]["Duration"]=raw["duration"]
-                    if "width" in raw:
-                        try: result["dimensions"]["width"]=int(raw["width"].split()[0])
-                        except: pass
-                    if "height" in raw:
-                        try: result["dimensions"]["height"]=int(raw["height"].split()[0])
-                        except: pass
-                    for dk in ("creation_date","last_modification","date_time_original"):
-                        if dk in raw: result["dates"]["creation"]=raw[dk]; result["dates"]["original"]=raw[dk]; break
-                    for ck in ("compression","video_compression","codec","format_version"):
-                        if ck in raw: result["codec"]=raw[ck]; result["fields"]["Codec"]=raw[ck]; break
-                    if "encoder" in raw: result["camera"]["software"]=raw["encoder"]; result["fields"]["Encoder"]=raw["encoder"]
-                    if "comment" in raw: result["fields"]["Comment"]=raw["comment"]
-                    if "producer" in raw: result["fields"]["Producer"]=raw["producer"]
-                    if "bit_rate" in raw:
-                        result["fields"]["Bitrate"]=raw["bit_rate"]
-                        try: result["bitrate"]=int(re.sub(r'[^\d]','',raw["bit_rate"]))
-                        except: pass
-                    for ak in ("audio_compression","audio_codec"):
-                        if ak in raw: result["audio"]["codec"]=raw[ak]; result["fields"]["AudioCodec"]=raw[ak]; break
-                    if "sample_rate" in raw:
-                        try: result["audio"]["sample_rate"]=int(re.sub(r'[^\d]','',raw["sample_rate"]))
-                        except: pass
-                    if "channel" in raw: result["fields"]["AudioChannels"]=raw["channel"]
-                    fmap={"Duration":"duration","Codec":"codec","Bitrate":"bitrate","Encoder":"encoder","Comment":"comment","AudioCodec":"audio_codec","AudioChannels":"audio_channels"}
-                    for dk,ek in fmap.items():
-                        if dk in result["fields"] and ek in VIDEO_FIELD_EXPLAIN:
-                            result["fields_explained"][dk]={"value":result["fields"][dk],"explanation":VIDEO_FIELD_EXPLAIN[ek]}
-                parser.stream._input.close()
-        except: pass
+                if not meta:
+                    try: parser.stream._input.close()
+                    except: pass
+                    return {}
+                raw={}
+                for item in meta:
+                    for val in item.values: raw[item.key]=str(val.value) if hasattr(val,'value') else str(val)
+                try: parser.stream._input.close()
+                except: pass
+                return raw
+            with concurrent.futures.ThreadPoolExecutor() as ex:
+                future = ex.submit(_parse_hachoir, file_path)
+                try:
+                    raw = future.result(timeout=15)
+                except concurrent.futures.TimeoutError:
+                    raw = {}
+                    result.setdefault("warnings",[]).append("hachoir timed out (file may be very large or unusual format)")
+            if raw:
+                result["raw"]=raw
+                if "duration" in raw: result["fields"]["Duration"]=raw["duration"]
+                if "width" in raw:
+                    try: result["dimensions"]["width"]=int(raw["width"].split()[0])
+                    except: pass
+                if "height" in raw:
+                    try: result["dimensions"]["height"]=int(raw["height"].split()[0])
+                    except: pass
+                for dk in ("creation_date","last_modification","date_time_original"):
+                    if dk in raw: result["dates"]["creation"]=raw[dk]; result["dates"]["original"]=raw[dk]; break
+                for ck in ("compression","video_compression","codec","format_version"):
+                    if ck in raw: result["codec"]=raw[ck]; result["fields"]["Codec"]=raw[ck]; break
+                if "encoder" in raw: result["camera"]["software"]=raw["encoder"]; result["fields"]["Encoder"]=raw["encoder"]
+                if "comment" in raw: result["fields"]["Comment"]=raw["comment"]
+                if "producer" in raw: result["fields"]["Producer"]=raw["producer"]
+                if "bit_rate" in raw:
+                    result["fields"]["Bitrate"]=raw["bit_rate"]
+                    try: result["bitrate"]=int(re.sub(r'[^\d]','',raw["bit_rate"]))
+                    except: pass
+                for ak in ("audio_compression","audio_codec"):
+                    if ak in raw: result["audio"]["codec"]=raw[ak]; result["fields"]["AudioCodec"]=raw[ak]; break
+                if "sample_rate" in raw:
+                    try: result["audio"]["sample_rate"]=int(re.sub(r'[^\d]','',raw["sample_rate"]))
+                    except: pass
+                if "channel" in raw: result["fields"]["AudioChannels"]=raw["channel"]
+                fmap={"Duration":"duration","Codec":"codec","Bitrate":"bitrate","Encoder":"encoder","Comment":"comment","AudioCodec":"audio_codec","AudioChannels":"audio_channels"}
+                for dk,ek in fmap.items():
+                    if dk in result["fields"] and ek in VIDEO_FIELD_EXPLAIN:
+                        result["fields_explained"][dk]={"value":result["fields"][dk],"explanation":VIDEO_FIELD_EXPLAIN[ek]}
+        except Exception as e:
+            result.setdefault("warnings",[]).append(f"hachoir error: {e}")
     if HAS_CV2:
         try:
             cap=cv2.VideoCapture(file_path)
@@ -524,6 +675,35 @@ def classify_file(fn):
     if ext in IMAGE_EXTS: return "image"
     if ext in VIDEO_EXTS: return "video"
     return "other"
+
+def save_and_hash(file_obj, save_path):
+    """Save uploaded file to disk while computing MD5+SHA-256 in the same pass.
+    Eliminates the need to re-read the entire file for hashing.
+    For a 1.3GB file this cuts processing time roughly in half."""
+    md5 = hashlib.md5(); sha = hashlib.sha256()
+    with open(save_path, "wb") as out:
+        while True:
+            chunk = file_obj.read(1048576)  # 1MB chunks
+            if not chunk: break
+            out.write(chunk)
+            md5.update(chunk)
+            sha.update(chunk)
+    return md5.hexdigest(), sha.hexdigest()
+
+def perceptual_hash_video(file_path):
+    """Compute perceptual hashes from first meaningful frame. Fast, header-seek only."""
+    result = {"phash":"","dhash":"","whash":"","ahash":""}
+    if not HAS_CV2 or not HAS_IMAGEHASH or not HAS_PIL: return result
+    try:
+        cap = cv2.VideoCapture(file_path)
+        for _ in range(10): cap.read()
+        ret, frame = cap.read(); cap.release()
+        if ret:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); img = Image.fromarray(rgb)
+            result["phash"]=str(imagehash.phash(img)); result["dhash"]=str(imagehash.dhash(img))
+            result["whash"]=str(imagehash.whash(img)); result["ahash"]=str(imagehash.average_hash(img))
+    except: pass
+    return result
 
 # ===========================================================================
 # FORENSIC ANALYSIS MODULES
@@ -1028,6 +1208,213 @@ def forensic_audio_analysis(file_path, evidence_id):
     return result
 
 
+def forensic_enf_analysis(file_path, evidence_id):
+    """Extract Electrical Network Frequency (ENF) from audio and video.
+    ENF is the power grid frequency (50Hz or 60Hz) embedded in recordings
+    through electromagnetic interference. Classifying 50 vs 60Hz narrows
+    geographic region: 50Hz = Europe/Asia/Africa, 60Hz = Americas/parts of Asia.
+    Court-accepted forensic technique."""
+    result = {"detected_freq": 0, "grid_region": "", "confidence": 0,
+              "enf_trace": [], "source": "", "flags": [], "details": {}}
+    if not HAS_FFMPEG or not HAS_NUMPY or not HAS_SCIPY:
+        result["flags"].append("ENF analysis requires ffmpeg, numpy, and scipy")
+        return result
+
+    wav_path = os.path.join(FRAMES_DIR, f"enf_{evidence_id}.wav")
+    try:
+        # Extract audio at high sample rate for ENF detection
+        subprocess.run([
+            FFMPEG_PATH, "-i", file_path, "-vn", "-acodec", "pcm_s16le",
+            "-ar", "8000", "-ac", "1", "-y", wav_path
+        ], capture_output=True, timeout=120)
+
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) < 1000:
+            result["flags"].append("No audio track or audio too short for ENF analysis")
+            return result
+
+        sr, audio = scipy_wav.read(wav_path)
+        audio = audio.astype(np.float64)
+        if audio.max() == 0:
+            result["flags"].append("Silent audio track -- no ENF signal possible")
+            return result
+        audio = audio / max(abs(audio.max()), abs(audio.min()))
+
+        duration = len(audio) / sr
+        result["details"]["audio_duration"] = round(duration, 2)
+        result["details"]["sample_rate"] = sr
+
+        if duration < 2:
+            result["flags"].append("Audio too short for reliable ENF analysis (need 2+ seconds)")
+            return result
+
+        # ---- ENF Detection via STFT ----
+        # We analyze around both 50Hz and 60Hz (and their harmonics)
+        # Using Short-Time Fourier Transform for time-varying frequency tracking
+
+        # STFT parameters
+        nperseg = min(sr * 2, len(audio))  # 2-second windows
+        noverlap = nperseg // 2
+
+        freqs, times, Zxx = scipy_signal.stft(audio, fs=sr, nperseg=nperseg, noverlap=noverlap)
+        magnitude = np.abs(Zxx)
+
+        # Find energy around 50Hz and 60Hz bands (with tolerance)
+        def band_energy(center_freq, bandwidth=2.0):
+            """Get average energy in a frequency band over time."""
+            mask = (freqs >= center_freq - bandwidth) & (freqs <= center_freq + bandwidth)
+            if not np.any(mask):
+                return np.zeros(len(times)), 0
+            band_mag = magnitude[mask, :]
+            # Find the peak frequency in each time window
+            peak_freqs = []
+            energies = []
+            for t_idx in range(band_mag.shape[1]):
+                col = band_mag[:, t_idx]
+                if col.max() > 0:
+                    peak_idx = np.argmax(col)
+                    peak_freq = freqs[mask][peak_idx]
+                    peak_freqs.append(float(peak_freq))
+                    energies.append(float(col[peak_idx]))
+                else:
+                    peak_freqs.append(center_freq)
+                    energies.append(0)
+            return np.array(energies), np.array(peak_freqs)
+
+        # Analyze fundamental and 2nd harmonic for both grid types
+        e50, pf50 = band_energy(50.0)
+        e60, pf60 = band_energy(60.0)
+        e100, pf100 = band_energy(100.0)  # 2nd harmonic of 50Hz
+        e120, pf120 = band_energy(120.0)  # 2nd harmonic of 60Hz
+
+        # Combined score: fundamental + harmonic
+        score_50 = np.mean(e50) + np.mean(e100) * 0.5
+        score_60 = np.mean(e60) + np.mean(e120) * 0.5
+
+        # Noise floor estimate (energy at non-ENF frequencies)
+        e_noise1, _ = band_energy(55.0, 1.0)  # Between 50 and 60
+        e_noise2, _ = band_energy(45.0, 1.0)
+        noise_floor = (np.mean(e_noise1) + np.mean(e_noise2)) / 2
+
+        result["details"]["score_50hz"] = round(float(score_50), 6)
+        result["details"]["score_60hz"] = round(float(score_60), 6)
+        result["details"]["noise_floor"] = round(float(noise_floor), 6)
+
+        # Signal-to-noise ratio
+        snr_50 = score_50 / (noise_floor + 1e-10)
+        snr_60 = score_60 / (noise_floor + 1e-10)
+
+        result["details"]["snr_50hz"] = round(float(snr_50), 2)
+        result["details"]["snr_60hz"] = round(float(snr_60), 2)
+
+        # Classification
+        if snr_50 < 1.5 and snr_60 < 1.5:
+            result["flags"].append("No clear ENF signal detected (recording may be battery-powered or outdoors)")
+            result["confidence"] = 0
+            result["grid_region"] = "indeterminate"
+        elif score_50 > score_60 * 1.3:
+            result["detected_freq"] = 50.0
+            result["grid_region"] = "50Hz grid (Europe, Asia, Africa, Oceania)"
+            result["source"] = "audio"
+            confidence = min(95, int(snr_50 * 10))
+            result["confidence"] = confidence
+            if confidence > 60:
+                result["flags"].append(f"50Hz ENF detected with {confidence}% confidence -- recording likely from 50Hz power grid region")
+            else:
+                result["flags"].append(f"Weak 50Hz ENF signal ({confidence}% confidence) -- may be 50Hz grid region")
+        elif score_60 > score_50 * 1.3:
+            result["detected_freq"] = 60.0
+            result["grid_region"] = "60Hz grid (Americas, parts of East Asia, Saudi Arabia)"
+            result["source"] = "audio"
+            confidence = min(95, int(snr_60 * 10))
+            result["confidence"] = confidence
+            if confidence > 60:
+                result["flags"].append(f"60Hz ENF detected with {confidence}% confidence -- recording likely from 60Hz power grid region")
+            else:
+                result["flags"].append(f"Weak 60Hz ENF signal ({confidence}% confidence) -- may be 60Hz grid region")
+        else:
+            result["flags"].append("Both 50Hz and 60Hz signals present -- ambiguous (could be mixed environment or broadband noise)")
+            result["grid_region"] = "ambiguous"
+            result["confidence"] = max(0, int(max(snr_50, snr_60) * 5))
+
+        # Build ENF trace over time for visualization
+        if result["detected_freq"] == 50.0:
+            trace_freqs = pf50
+        elif result["detected_freq"] == 60.0:
+            trace_freqs = pf60
+        else:
+            trace_freqs = pf50 if score_50 > score_60 else pf60
+
+        if isinstance(trace_freqs, np.ndarray) and len(trace_freqs) > 0:
+            enf_trace = []
+            for i, t in enumerate(times):
+                if i < len(trace_freqs):
+                    enf_trace.append({
+                        "t": round(float(t), 2),
+                        "freq": round(float(trace_freqs[i]), 3)
+                    })
+            result["enf_trace"] = enf_trace
+
+        # ---- Video luminance ENF (supplementary) ----
+        # Indoor lighting under AC power flickers at the ENF frequency
+        # This is harder to detect but provides corroboration
+        if HAS_CV2:
+            try:
+                cap = cv2.VideoCapture(file_path)
+                if cap.isOpened():
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    if fps >= 50 and total > fps * 2:  # Need high fps and 2+ seconds
+                        # Sample luminance from superpixel grid
+                        lum_values = []
+                        max_frames = min(total, int(fps * 10))  # Max 10 seconds
+                        for fi in range(max_frames):
+                            ret, frame = cap.read()
+                            if not ret: break
+                            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                            lum_values.append(float(np.mean(gray)))
+                        cap.release()
+
+                        if len(lum_values) > fps:
+                            lum = np.array(lum_values) - np.mean(lum_values)
+                            # FFT of luminance
+                            lum_fft = np.abs(np.fft.rfft(lum))
+                            lum_freqs = np.fft.rfftfreq(len(lum), 1/fps)
+
+                            # Check for peaks at 50 and 60 Hz
+                            mask_50 = (lum_freqs >= 48) & (lum_freqs <= 52)
+                            mask_60 = (lum_freqs >= 58) & (lum_freqs <= 62)
+                            lum_50 = np.max(lum_fft[mask_50]) if np.any(mask_50) else 0
+                            lum_60 = np.max(lum_fft[mask_60]) if np.any(mask_60) else 0
+
+                            result["details"]["video_lum_50hz"] = round(float(lum_50), 4)
+                            result["details"]["video_lum_60hz"] = round(float(lum_60), 4)
+
+                            if lum_50 > lum_60 * 1.5 and lum_50 > np.median(lum_fft) * 3:
+                                result["flags"].append("Video luminance also shows 50Hz flicker (corroborates audio ENF)")
+                                result["source"] = "audio+video"
+                                result["confidence"] = min(98, result["confidence"] + 15)
+                            elif lum_60 > lum_50 * 1.5 and lum_60 > np.median(lum_fft) * 3:
+                                result["flags"].append("Video luminance also shows 60Hz flicker (corroborates audio ENF)")
+                                result["source"] = "audio+video"
+                                result["confidence"] = min(98, result["confidence"] + 15)
+                    else:
+                        cap.release()
+                        if fps < 50:
+                            result["details"]["video_enf_note"] = f"Video fps ({fps:.1f}) too low for luminance ENF (need 50+)"
+            except Exception as ve:
+                result["details"]["video_enf_error"] = str(ve)
+
+    except subprocess.TimeoutExpired:
+        result["flags"].append("Audio extraction timed out")
+    except Exception as e:
+        result["error"] = str(e)
+    finally:
+        if os.path.exists(wav_path):
+            try: os.remove(wav_path)
+            except: pass
+    return result
+
+
 def forensic_run_all(file_path, evidence_id, media_type):
     """Run all applicable forensic analyses on a file."""
     results = {}
@@ -1038,6 +1425,7 @@ def forensic_run_all(file_path, evidence_id, media_type):
         results["screen_recording"] = forensic_screen_recording_detection(file_path)
         results["lighting"] = forensic_lighting_analysis(file_path)
         results["audio"] = forensic_audio_analysis(file_path, evidence_id)
+        results["enf"] = forensic_enf_analysis(file_path, evidence_id)
     elif media_type == "image":
         results["scene"] = forensic_scene_analysis(file_path, evidence_id)
         results["lighting"] = forensic_lighting_analysis(file_path)
@@ -1093,9 +1481,18 @@ def api_analyze():
     tags=request.form.get("tags",""); notes=request.form.get("notes","")
     safe=re.sub(r'[^\w\-_\. ]','_',f.filename)
     ts=datetime.now().strftime("%Y%m%d_%H%M%S")
-    sn=f"{ts}_{safe}"; sp=os.path.join(UPLOAD_DIR,sn); f.save(sp)
+    sn=f"{ts}_{safe}"; sp=os.path.join(UPLOAD_DIR,sn)
+    # Stream save + hash in one pass (no double-read for large files)
+    md5_hex, sha_hex = save_and_hash(f.stream, sp)
     fsz=os.path.getsize(sp); mt=classify_file(f.filename)
-    hashes=compute_video_hashes(sp) if mt=="video" else compute_hashes(sp)
+    if mt=="video":
+        phashes = perceptual_hash_video(sp)
+        hashes = {"md5":md5_hex,"sha256":sha_hex,**phashes}
+    elif mt=="image":
+        hashes = compute_hashes(sp)
+        hashes["md5"]=md5_hex; hashes["sha256"]=sha_hex
+    else:
+        hashes = {"md5":md5_hex,"sha256":sha_hex,"phash":"","dhash":"","whash":"","ahash":""}
     meta=extract_image_metadata(sp) if mt=="image" else (extract_video_metadata(sp) if mt=="video" else {})
     now=datetime.now().isoformat(); gps=meta.get("gps")
     with get_db() as c:
@@ -1125,13 +1522,19 @@ def api_analyze():
         eid=cur.lastrowid
     generate_thumbnail(sp,eid,mt)
     if mt=="video":
-        frames=extract_frames(sp,eid,count=8)
-        if frames:
-            with get_db() as c:
-                for fr in frames: c.execute("INSERT INTO extracted_frames (evidence_id,frame_number,timestamp_sec,file_path,phash) VALUES (?,?,?,?,?)",(eid,fr["frame_number"],fr["timestamp_sec"],fr["file_path"],fr["phash"]))
-                c.execute("UPDATE evidence SET frames_extracted=? WHERE id=?",(len(frames),eid))
-        # Generate browser-playable preview
-        generate_preview(sp, eid)
+        # Heavy work in background so the response returns immediately
+        def _background_video_work(file_path, evidence_id):
+            with BG_SEMAPHORE:
+                try:
+                    frames=extract_frames(file_path, evidence_id, count=8)
+                    if frames:
+                        with get_db() as c:
+                            for fr in frames: c.execute("INSERT INTO extracted_frames (evidence_id,frame_number,timestamp_sec,file_path,phash) VALUES (?,?,?,?,?)",(evidence_id,fr["frame_number"],fr["timestamp_sec"],fr["file_path"],fr["phash"]))
+                            c.execute("UPDATE evidence SET frames_extracted=? WHERE id=?",(len(frames),evidence_id))
+                    generate_preview(file_path, evidence_id)
+                except Exception as e:
+                    print(f"[!] Background video processing error for {evidence_id}: {e}")
+        threading.Thread(target=_background_video_work, args=(sp,eid), daemon=True).start()
     return jsonify({"id":eid,"file_name":f.filename,"media_type":mt,"file_size":fsz,"hashes":hashes,"metadata":meta})
 
 @app.route("/api/analyze/batch", methods=["POST"])
@@ -1145,9 +1548,17 @@ def api_analyze_batch():
         if not f.filename: continue
         safe=re.sub(r'[^\w\-_\. ]','_',f.filename)
         ts=datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        sn=f"{ts}_{safe}"; sp=os.path.join(UPLOAD_DIR,sn); f.save(sp)
+        sn=f"{ts}_{safe}"; sp=os.path.join(UPLOAD_DIR,sn)
+        md5_hex, sha_hex = save_and_hash(f.stream, sp)
         fsz=os.path.getsize(sp); mt=classify_file(f.filename)
-        hashes=compute_video_hashes(sp) if mt=="video" else compute_hashes(sp)
+        if mt=="video":
+            phashes = perceptual_hash_video(sp)
+            hashes = {"md5":md5_hex,"sha256":sha_hex,**phashes}
+        elif mt=="image":
+            hashes = compute_hashes(sp)
+            hashes["md5"]=md5_hex; hashes["sha256"]=sha_hex
+        else:
+            hashes = {"md5":md5_hex,"sha256":sha_hex,"phash":"","dhash":"","whash":"","ahash":""}
         meta=extract_image_metadata(sp) if mt=="image" else (extract_video_metadata(sp) if mt=="video" else {})
         now=datetime.now().isoformat(); gps=meta.get("gps")
         with get_db() as c:
@@ -1177,12 +1588,19 @@ def api_analyze_batch():
             eid=cur.lastrowid
         generate_thumbnail(sp,eid,mt)
         if mt=="video":
-            frames=extract_frames(sp,eid,count=8)
-            if frames:
-                with get_db() as c:
-                    for fr in frames: c.execute("INSERT INTO extracted_frames (evidence_id,frame_number,timestamp_sec,file_path,phash) VALUES (?,?,?,?,?)",(eid,fr["frame_number"],fr["timestamp_sec"],fr["file_path"],fr["phash"]))
-                    c.execute("UPDATE evidence SET frames_extracted=? WHERE id=?",(len(frames),eid))
-            generate_preview(sp, eid)
+            _sp,_eid=sp,eid  # capture for closure
+            def _bg_batch(fp,evid):
+                with BG_SEMAPHORE:
+                    try:
+                        frames=extract_frames(fp,evid,count=8)
+                        if frames:
+                            with get_db() as c:
+                                for fr in frames: c.execute("INSERT INTO extracted_frames (evidence_id,frame_number,timestamp_sec,file_path,phash) VALUES (?,?,?,?,?)",(evid,fr["frame_number"],fr["timestamp_sec"],fr["file_path"],fr["phash"]))
+                                c.execute("UPDATE evidence SET frames_extracted=? WHERE id=?",(len(frames),evid))
+                        generate_preview(fp, evid)
+                    except Exception as e:
+                        print(f"[!] Background batch processing error for {evid}: {e}")
+            threading.Thread(target=_bg_batch, args=(_sp,_eid), daemon=True).start()
         results.append({"id":eid,"file_name":f.filename,"media_type":mt,"duration":meta.get("duration",0),"stripping_detected":meta.get("stripping",{}).get("detected",False)})
     return jsonify({"results":results,"count":len(results)})
 
@@ -1326,7 +1744,7 @@ def export_json():
         if sid: ev=[dict(r) for r in c.execute("SELECT * FROM evidence WHERE suspect_id=?",(int(sid),)).fetchall()]; sus=dict(c.execute("SELECT * FROM suspects WHERE id=?",(int(sid),)).fetchone())
         else: ev=[dict(r) for r in c.execute("SELECT * FROM evidence").fetchall()]; sus=None
     for e in ev: e["metadata_json"]=json.loads(e.get("metadata_json","{}")); e["stripping_indicators"]=json.loads(e.get("stripping_indicators","[]"))
-    payload={"exported_at":datetime.now().isoformat(),"tool":"Palimpsest v3.1","suspect":sus,"evidence_count":len(ev),"evidence":ev}
+    payload={"exported_at":datetime.now().isoformat(),"tool":"Palimpsest v4.0","suspect":sus,"evidence_count":len(ev),"evidence":ev}
     fn=f"palimpsest_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"; fp=os.path.join(EXPORT_DIR,fn)
     with open(fp,"w") as f: json.dump(payload,f,indent=2,default=str)
     return send_file(fp,as_attachment=True,download_name=fn)
@@ -1432,7 +1850,7 @@ tr:hover td{background:#1c1f2e}
 a{color:#4f8ff7}
 </style></head><body>
 <h1>Palimpsest Evidence Report</h1>
-<div class="meta">Generated: """ + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + """ | Tool: Palimpsest v3.1 | ephemeradev.net</div>
+<div class="meta">Generated: """ + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + """ | Tool: Palimpsest v4.0 | ephemeradev.net</div>
 <div class="quote">"Sorrow be damned and all your plans. Fuck the faithful, fuck the committed, the dedicated, the true believers; fuck all the sure and certain people prepared to maim and kill whoever got in their way; fuck every cause that ended in murder and a child screaming."<div class="attr">Iain Banks, Against a Dark Background</div></div>
 """
     if sus:
@@ -1474,7 +1892,7 @@ a{color:#4f8ff7}
                 html+=f'<div style="font-size:12px;color:#f87171;margin-left:12px">- {ind}</div>'
         if e.get("notes"): html+=f'<div style="margin-top:8px;font-size:13px">Notes: {e["notes"]}</div>'
         html+='</div>'
-    html+='<div class="meta" style="margin-top:40px;text-align:center">Generated by Palimpsest v3.1 | <a href="https://ephemeradev.net">ephemeradev.net</a> | <a href="https://github.com/ephemera02">github.com/ephemera02</a></div>'
+    html+='<div class="meta" style="margin-top:40px;text-align:center">Generated by Palimpsest v4.0 | <a href="https://ephemeradev.net">ephemeradev.net</a> | <a href="https://github.com/ephemera02">github.com/ephemera02</a></div>'
     html+='</body></html>'
     with open(fp,"w",encoding="utf-8") as f: f.write(html)
     return send_file(fp,as_attachment=True,download_name=fn)
@@ -1521,7 +1939,7 @@ def export_markdown():
             for ind in e.get("stripping_indicators",[]): md+=f'  - {ind}\n'
         if e.get("notes"): md+=f'- Notes: {e["notes"]}\n'
         md+='\n'
-    md+=f"\n---\n\nGenerated by Palimpsest v3.1 | ephemeradev.net | github.com/ephemera02\n"
+    md+=f"\n---\n\nGenerated by Palimpsest v4.0 | ephemeradev.net | github.com/ephemera02\n"
     with open(fp,"w",encoding="utf-8") as f: f.write(md)
     return send_file(fp,as_attachment=True,download_name=fn)
 
@@ -1605,13 +2023,6 @@ def api_timeline():
             FROM evidence WHERE original_date!='' OR creation_date!='' OR modify_date!=''
             ORDER BY COALESCE(NULLIF(original_date,''),NULLIF(creation_date,''),modify_date)""").fetchall()])
 
-@app.route("/api/info")
-def api_info():
-    return jsonify({"version":"3.1.0","name":"Palimpsest","pil":HAS_PIL,"imagehash":HAS_IMAGEHASH,
-                     "cv2":HAS_CV2,"hachoir":HAS_HACHOIR,"reportlab":HAS_REPORTLAB,
-                     "numpy":HAS_NUMPY,"scipy":HAS_SCIPY,"ffmpeg":HAS_FFMPEG})
-
-# ===== FORENSIC API ROUTES =====
 @app.route("/api/forensics/run/<int:eid>", methods=["POST"])
 def api_forensics_run(eid):
     """Run all forensic analyses on a single evidence item."""
@@ -1621,13 +2032,13 @@ def api_forensics_run(eid):
     fp = os.path.join(UPLOAD_DIR, r["file_path"])
     if not os.path.exists(fp): return jsonify({"error":"File not found on disk"}),404
     results = forensic_run_all(fp, eid, r["media_type"])
-    # Store results
     now = datetime.now().isoformat()
     all_flags = []
     with get_db() as c:
         c.execute("DELETE FROM forensic_results WHERE evidence_id=?", (eid,))
         c.execute("DELETE FROM scene_signatures WHERE evidence_id=?", (eid,))
         c.execute("DELETE FROM audio_fingerprints WHERE evidence_id=?", (eid,))
+        c.execute("DELETE FROM enf_results WHERE evidence_id=?", (eid,))
         for atype, data in results.items():
             flags = data.get("flags", [])
             all_flags.extend(flags)
@@ -1642,6 +2053,11 @@ def api_forensics_run(eid):
                     (eid, data.get("duration",0), 0, data.get("fingerprint_hash",""),
                      json.dumps(data.get("details",{}).get("energy_profile",[])),
                      json.dumps(data.get("spectral_features",{}))))
+            if atype == "enf" and data.get("detected_freq", 0) > 0:
+                c.execute("INSERT INTO enf_results (evidence_id,detected_freq,grid_region,confidence,enf_trace,source,flags,analyzed_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (eid, data.get("detected_freq",0), data.get("grid_region",""),
+                     data.get("confidence",0), json.dumps(data.get("enf_trace",[])),
+                     data.get("source",""), json.dumps(data.get("flags",[])), now))
     return jsonify({"evidence_id":eid,"results":results,"total_flags":len(all_flags),"flags":all_flags})
 
 @app.route("/api/forensics/results/<int:eid>")
@@ -1718,8 +2134,458 @@ def api_forensics_batch():
                         (e["id"], data.get("duration",0), 0, data.get("fingerprint_hash",""),
                          json.dumps(data.get("details",{}).get("energy_profile",[])),
                          json.dumps(data.get("spectral_features",{}))))
+                if atype == "enf" and data.get("detected_freq", 0) > 0:
+                    c.execute("INSERT INTO enf_results (evidence_id,detected_freq,grid_region,confidence,enf_trace,source,flags,analyzed_at) VALUES (?,?,?,?,?,?,?,?)",
+                        (e["id"], data.get("detected_freq",0), data.get("grid_region",""),
+                         data.get("confidence",0), json.dumps(data.get("enf_trace",[])),
+                         data.get("source",""), json.dumps(data.get("flags",[])), now))
         results.append({"id":e["id"],"flags":len(all_flags)})
     return jsonify({"analyzed":len(results),"pending_before":len(pending),"results":results})
+
+# ===== V4.0 API ROUTES =====
+
+@app.route("/api/enf/results")
+def api_enf_results():
+    """Get ENF analysis results across all evidence."""
+    with get_db() as c:
+        rows = [dict(r) for r in c.execute("""
+            SELECT e.id as evidence_id, e.file_name, e.duration, e.codec,
+                   enf.detected_freq, enf.grid_region, enf.confidence, enf.source,
+                   enf.enf_trace, enf.flags, enf.analyzed_at
+            FROM enf_results enf
+            JOIN evidence e ON e.id = enf.evidence_id
+            ORDER BY enf.confidence DESC
+        """).fetchall()]
+        for r in rows:
+            r["enf_trace"] = json.loads(r.get("enf_trace", "[]"))
+            r["flags"] = json.loads(r.get("flags", "[]"))
+    return jsonify(rows)
+
+@app.route("/api/enf/matches")
+def api_enf_matches():
+    """Find videos with matching ENF traces (recorded at the same time on the same grid)."""
+    with get_db() as c:
+        enfs = [dict(r) for r in c.execute("""
+            SELECT enf.*, e.file_name FROM enf_results enf
+            JOIN evidence e ON e.id = enf.evidence_id
+            WHERE enf.confidence > 30
+        """).fetchall()]
+    matches = []
+    seen = set()
+    for i, a in enumerate(enfs):
+        for j, b in enumerate(enfs[i+1:], i+1):
+            key = (min(a["evidence_id"], b["evidence_id"]), max(a["evidence_id"], b["evidence_id"]))
+            if key in seen: continue
+            # Same grid type
+            if a["detected_freq"] == b["detected_freq"] and a["detected_freq"] > 0:
+                matches.append({
+                    "id_a": a["evidence_id"], "name_a": a["file_name"],
+                    "id_b": b["evidence_id"], "name_b": b["file_name"],
+                    "freq": a["detected_freq"],
+                    "grid": a["grid_region"],
+                    "confidence_a": a["confidence"], "confidence_b": b["confidence"]
+                })
+                seen.add(key)
+    return jsonify(matches)
+
+@app.route("/api/enf/summary")
+def api_enf_summary():
+    """Summary stats for ENF results."""
+    with get_db() as c:
+        total = c.execute("SELECT COUNT(*) FROM enf_results").fetchone()[0]
+        hz50 = c.execute("SELECT COUNT(*) FROM enf_results WHERE detected_freq=50").fetchone()[0]
+        hz60 = c.execute("SELECT COUNT(*) FROM enf_results WHERE detected_freq=60").fetchone()[0]
+        ambig = c.execute("SELECT COUNT(*) FROM enf_results WHERE grid_region='ambiguous' OR grid_region='indeterminate'").fetchone()[0]
+        avg_conf = c.execute("SELECT AVG(confidence) FROM enf_results WHERE confidence > 0").fetchone()[0] or 0
+    return jsonify({"total": total, "hz50": hz50, "hz60": hz60, "ambiguous": ambig,
+                    "avg_confidence": round(avg_conf, 1)})
+
+@app.route("/api/metadata/groups")
+def api_metadata_groups():
+    """Group all evidence by metadata fields to map the distribution pipeline."""
+    with get_db() as c:
+        all_ev = [dict(r) for r in c.execute("""
+            SELECT id, file_name, file_size, media_type, width, height, duration, fps, codec,
+                   bitrate, audio_codec, audio_channels, audio_sample_rate,
+                   creation_date, metadata_json
+            FROM evidence ORDER BY file_name
+        """).fetchall()]
+
+    # Parse raw metadata for comment and encoder fields
+    for e in all_ev:
+        raw = json.loads(e.get("metadata_json", "{}"))
+        e["comment"] = raw.get("comment", "")
+        e["encoder"] = raw.get("encoder", "")
+
+    # Group by comment
+    comment_groups = {}
+    for e in all_ev:
+        key = e["comment"] or "(no comment)"
+        comment_groups.setdefault(key, []).append({"id": e["id"], "file_name": e["file_name"]})
+
+    # Group by encoder
+    encoder_groups = {}
+    for e in all_ev:
+        key = e["encoder"] or "(no encoder)"
+        encoder_groups.setdefault(key, []).append({"id": e["id"], "file_name": e["file_name"]})
+
+    # Group by codec + resolution + fps (distribution chain fingerprint)
+    pipeline_groups = {}
+    for e in all_ev:
+        key = f"{e['codec'] or '?'} | {e['width']}x{e['height']} | {e['fps']}fps"
+        pipeline_groups.setdefault(key, []).append({"id": e["id"], "file_name": e["file_name"]})
+
+    # Group by file size range
+    size_groups = {}
+    for e in all_ev:
+        sz = e.get("file_size", 0)
+        if sz < 1048576: bucket = "< 1 MB"
+        elif sz < 10485760: bucket = "1-10 MB"
+        elif sz < 52428800: bucket = "10-50 MB"
+        elif sz < 104857600: bucket = "50-100 MB"
+        elif sz < 524288000: bucket = "100-500 MB"
+        else: bucket = "500+ MB"
+        size_groups.setdefault(bucket, []).append({"id": e["id"], "file_name": e["file_name"]})
+
+    return jsonify({
+        "comment": {k: {"count": len(v), "items": v[:20]} for k, v in sorted(comment_groups.items(), key=lambda x: -len(x[1]))},
+        "encoder": {k: {"count": len(v), "items": v[:20]} for k, v in sorted(encoder_groups.items(), key=lambda x: -len(x[1]))},
+        "pipeline": {k: {"count": len(v), "items": v[:20]} for k, v in sorted(pipeline_groups.items(), key=lambda x: -len(x[1]))},
+        "size": {k: {"count": len(v), "items": v[:20]} for k, v in sorted(size_groups.items(), key=lambda x: -len(x[1]))}
+    })
+
+# ===== AI VISION ANALYSIS ROUTES =====
+
+@app.route("/api/ai/providers")
+def api_ai_providers():
+    """Return available AI providers and their models."""
+    return jsonify(AI_PROVIDERS)
+
+@app.route("/api/ai/settings", methods=["GET", "PUT"])
+def api_ai_settings():
+    if request.method == "GET":
+        with get_db() as c:
+            row = c.execute("SELECT * FROM ai_settings WHERE id=1").fetchone()
+            if row:
+                d = dict(row)
+                # Mask API key for display
+                key = d.get("api_key", "")
+                d["api_key_masked"] = key[:8] + "..." + key[-4:] if len(key) > 12 else ("set" if key else "")
+                d["api_key"] = key  # Frontend needs it for API calls
+                return jsonify(d)
+        return jsonify({"provider": "anthropic", "model": "claude-sonnet-4-5-20250514", "api_key": "", "api_key_masked": ""})
+    else:
+        data = request.json
+        with get_db() as c:
+            c.execute("""UPDATE ai_settings SET provider=?, api_key=?, model=?,
+                custom_endpoint=?, default_prompt=? WHERE id=1""",
+                (data.get("provider", "anthropic"), data.get("api_key", ""),
+                 data.get("model", ""), data.get("custom_endpoint", ""),
+                 data.get("default_prompt", "")))
+        return jsonify({"ok": True})
+
+@app.route("/api/ai/estimate/<int:eid>")
+def api_ai_estimate(eid):
+    """Estimate cost of running AI vision analysis on an evidence item's frames."""
+    with get_db() as c:
+        ev = c.execute("SELECT id, file_name, frames_extracted FROM evidence WHERE id=?", (eid,)).fetchone()
+        if not ev: return jsonify({"error": "Not found"}), 404
+        frames = c.execute("SELECT COUNT(*) FROM extracted_frames WHERE evidence_id=?", (eid,)).fetchall()
+        frame_count = frames[0][0] if frames else 0
+        settings = c.execute("SELECT * FROM ai_settings WHERE id=1").fetchone()
+
+    if frame_count == 0:
+        return jsonify({"error": "No frames extracted. Run file analysis first.", "frame_count": 0})
+
+    provider = dict(settings).get("provider", "anthropic") if settings else "anthropic"
+    model_id = dict(settings).get("model", "") if settings else ""
+
+    # Find cost rates
+    input_cost = 3.0; output_cost = 15.0  # defaults
+    prov_info = AI_PROVIDERS.get(provider, {})
+    for m in prov_info.get("models", []):
+        if m["id"] == model_id:
+            input_cost = m["input_cost"]; output_cost = m["output_cost"]
+            break
+
+    # Estimate: each 360p frame ~ 1500 tokens input, prompt ~ 500 tokens, response ~ 800 tokens
+    tokens_per_frame_in = 2000
+    tokens_per_frame_out = 800
+    total_in = frame_count * tokens_per_frame_in
+    total_out = frame_count * tokens_per_frame_out
+    cost = (total_in / 1_000_000 * input_cost) + (total_out / 1_000_000 * output_cost)
+
+    return jsonify({
+        "evidence_id": eid,
+        "frame_count": frame_count,
+        "provider": prov_info.get("name", provider),
+        "model": model_id,
+        "estimated_tokens_in": total_in,
+        "estimated_tokens_out": total_out,
+        "estimated_cost": round(cost, 4),
+        "cost_display": f"${cost:.4f}"
+    })
+
+def _call_ai_vision(provider, model, api_key, prompt, image_b64, custom_endpoint=""):
+    """Call an AI vision API with a frame image. Returns parsed response text."""
+    prov_info = AI_PROVIDERS.get(provider, {})
+    fmt = prov_info.get("format", "openai")
+    endpoint = custom_endpoint if provider == "custom" and custom_endpoint else prov_info.get("endpoint", "")
+
+    if fmt == "anthropic":
+        body = json.dumps({
+            "model": model,
+            "max_tokens": 1500,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
+                    {"type": "text", "text": prompt}
+                ]
+            }]
+        }).encode("utf-8")
+        req = Request(endpoint, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("x-api-key", api_key)
+        req.add_header("anthropic-version", "2023-06-01")
+
+    elif fmt == "google":
+        endpoint = endpoint.replace("{model}", model) + f"?key={api_key}"
+        body = json.dumps({
+            "contents": [{"parts": [
+                {"inlineData": {"mimeType": "image/jpeg", "data": image_b64}},
+                {"text": prompt}
+            ]}]
+        }).encode("utf-8")
+        req = Request(endpoint, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+
+    else:  # openai / openrouter / custom
+        body = json.dumps({
+            "model": model,
+            "max_tokens": 1500,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                    {"type": "text", "text": prompt}
+                ]
+            }]
+        }).encode("utf-8")
+        req = Request(endpoint, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", f"Bearer {api_key}")
+        if provider == "openrouter":
+            req.add_header("HTTP-Referer", "https://ephemeradev.net")
+            req.add_header("X-Title", "Palimpsest")
+
+    try:
+        resp = urlopen(req, timeout=60)
+        data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        return {"error": f"API error {e.code}: {error_body[:500]}", "tokens": 0}
+    except URLError as e:
+        return {"error": f"Connection error: {str(e)}", "tokens": 0}
+    except Exception as e:
+        return {"error": str(e), "tokens": 0}
+
+    # Parse response based on format
+    text = ""
+    tokens = 0
+    if fmt == "anthropic":
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+        usage = data.get("usage", {})
+        tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+    elif fmt == "google":
+        for cand in data.get("candidates", []):
+            for part in cand.get("content", {}).get("parts", []):
+                text += part.get("text", "")
+        tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
+    else:
+        for choice in data.get("choices", []):
+            msg = choice.get("message", {})
+            text += msg.get("content", "")
+        usage = data.get("usage", {})
+        tokens = usage.get("total_tokens", 0)
+
+    # Try to parse JSON from text
+    parsed = {}
+    try:
+        # Strip markdown code fences if present
+        clean = text.strip()
+        if clean.startswith("```"): clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+        if clean.endswith("```"): clean = clean[:-3]
+        clean = clean.strip()
+        if clean.startswith("json"): clean = clean[4:].strip()
+        parsed = json.loads(clean)
+    except:
+        parsed = {"raw_text": text}
+
+    return {"result": parsed, "tokens": tokens}
+
+@app.route("/api/ai/analyze/<int:eid>", methods=["POST"])
+def api_ai_analyze(eid):
+    """Run AI vision analysis on extracted frames for an evidence item."""
+    with get_db() as c:
+        ev = c.execute("SELECT * FROM evidence WHERE id=?", (eid,)).fetchone()
+        if not ev: return jsonify({"error": "Not found"}), 404
+        frames = [dict(r) for r in c.execute(
+            "SELECT * FROM extracted_frames WHERE evidence_id=? ORDER BY frame_number", (eid,)).fetchall()]
+        settings = dict(c.execute("SELECT * FROM ai_settings WHERE id=1").fetchone())
+
+    if not frames:
+        return jsonify({"error": "No frames extracted. Analyze the file first."}), 400
+
+    api_key = settings.get("api_key", "")
+    if not api_key:
+        return jsonify({"error": "No API key configured. Go to AI Settings to add one."}), 400
+
+    provider = settings.get("provider", "anthropic")
+    model = settings.get("model", "")
+    prompt = settings.get("default_prompt", "Analyze this frame.")
+    custom_endpoint = settings.get("custom_endpoint", "")
+
+    # Find cost rates
+    input_cost_rate = 3.0; output_cost_rate = 15.0
+    prov_info = AI_PROVIDERS.get(provider, {})
+    for m in prov_info.get("models", []):
+        if m["id"] == model:
+            input_cost_rate = m["input_cost"]; output_cost_rate = m["output_cost"]
+            break
+
+    results = []
+    total_tokens = 0
+    total_cost = 0.0
+    now = datetime.now().isoformat()
+
+    # Clear previous AI results for this evidence
+    with get_db() as c:
+        c.execute("DELETE FROM ai_results WHERE evidence_id=?", (eid,))
+
+    for i, frame in enumerate(frames):
+        frame_path = os.path.join(FRAMES_DIR, frame["file_path"])
+        if not os.path.exists(frame_path):
+            results.append({"frame": i, "error": "Frame file not found"})
+            continue
+
+        # Read and base64 encode
+        with open(frame_path, "rb") as f:
+            image_b64 = base64.b64encode(f.read()).decode("ascii")
+
+        resp = _call_ai_vision(provider, model, api_key, prompt, image_b64, custom_endpoint)
+
+        if "error" in resp and "result" not in resp:
+            results.append({"frame": i, "error": resp["error"]})
+            continue
+
+        tokens = resp.get("tokens", 0)
+        # Rough cost estimate (input heavy for images)
+        est_cost = (tokens * 0.7 / 1_000_000 * input_cost_rate) + (tokens * 0.3 / 1_000_000 * output_cost_rate)
+        total_tokens += tokens
+        total_cost += est_cost
+
+        result_data = resp.get("result", {})
+        results.append({"frame": i, "result": result_data, "tokens": tokens})
+
+        # Store in DB
+        with get_db() as c:
+            c.execute("""INSERT INTO ai_results (evidence_id, provider, model, frame_index,
+                result_json, tokens_used, cost_estimate, analyzed_at)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (eid, provider, model, i, json.dumps(result_data, default=str),
+                 tokens, round(est_cost, 6), now))
+
+    # Update cumulative cost tracking
+    with get_db() as c:
+        c.execute("UPDATE ai_settings SET total_tokens = total_tokens + ?, total_cost = total_cost + ? WHERE id=1",
+            (total_tokens, total_cost))
+
+    return jsonify({
+        "evidence_id": eid, "frames_analyzed": len(results),
+        "total_tokens": total_tokens, "total_cost": round(total_cost, 4),
+        "results": results
+    })
+
+@app.route("/api/ai/results/<int:eid>")
+def api_ai_results(eid):
+    """Get AI analysis results for an evidence item."""
+    with get_db() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM ai_results WHERE evidence_id=? ORDER BY frame_index", (eid,)).fetchall()]
+        for r in rows:
+            r["result_json"] = json.loads(r.get("result_json", "{}"))
+    return jsonify(rows)
+
+@app.route("/api/ai/test", methods=["POST"])
+def api_ai_test():
+    """Test AI provider connection with a simple text prompt."""
+    data = request.json
+    provider = data.get("provider", "anthropic")
+    api_key = data.get("api_key", "")
+    model = data.get("model", "")
+    custom_endpoint = data.get("custom_endpoint", "")
+
+    if not api_key:
+        return jsonify({"error": "No API key provided"}), 400
+
+    prov_info = AI_PROVIDERS.get(provider, {})
+    fmt = prov_info.get("format", "openai")
+    endpoint = custom_endpoint if provider == "custom" and custom_endpoint else prov_info.get("endpoint", "")
+
+    try:
+        if fmt == "anthropic":
+            body = json.dumps({"model": model, "max_tokens": 50,
+                "messages": [{"role": "user", "content": "Reply with exactly: CONNECTION OK"}]}).encode("utf-8")
+            req = Request(endpoint, data=body, method="POST")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("x-api-key", api_key)
+            req.add_header("anthropic-version", "2023-06-01")
+        elif fmt == "google":
+            ep = endpoint.replace("{model}", model) + f"?key={api_key}"
+            body = json.dumps({"contents": [{"parts": [{"text": "Reply with exactly: CONNECTION OK"}]}]}).encode("utf-8")
+            req = Request(ep, data=body, method="POST")
+            req.add_header("Content-Type", "application/json")
+        else:
+            body = json.dumps({"model": model, "max_tokens": 50,
+                "messages": [{"role": "user", "content": "Reply with exactly: CONNECTION OK"}]}).encode("utf-8")
+            req = Request(endpoint, data=body, method="POST")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Authorization", f"Bearer {api_key}")
+
+        resp = urlopen(req, timeout=15)
+        result = json.loads(resp.read().decode("utf-8"))
+        return jsonify({"ok": True, "response": str(result)[:500]})
+    except HTTPError as e:
+        return jsonify({"ok": False, "error": f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:300]}"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
+
+@app.route("/api/enf/run/<int:eid>", methods=["POST"])
+def api_enf_run_single(eid):
+    """Run ENF analysis on a single evidence item (without full forensics)."""
+    with get_db() as c:
+        r = c.execute("SELECT file_path, media_type FROM evidence WHERE id=?", (eid,)).fetchone()
+        if not r: return jsonify({"error": "Not found"}), 404
+    fp = os.path.join(UPLOAD_DIR, r["file_path"])
+    if not os.path.exists(fp): return jsonify({"error": "File not found on disk"}), 404
+    result = forensic_enf_analysis(fp, eid)
+    now = datetime.now().isoformat()
+    with get_db() as c:
+        c.execute("DELETE FROM enf_results WHERE evidence_id=?", (eid,))
+        if result.get("detected_freq", 0) > 0:
+            c.execute("INSERT INTO enf_results (evidence_id,detected_freq,grid_region,confidence,enf_trace,source,flags,analyzed_at) VALUES (?,?,?,?,?,?,?,?)",
+                (eid, result["detected_freq"], result.get("grid_region",""), result.get("confidence",0),
+                 json.dumps(result.get("enf_trace",[])), result.get("source",""), json.dumps(result.get("flags",[])), now))
+    return jsonify(result)
+
+@app.route("/api/info")
+def api_info():
+    return jsonify({"version":"4.0.0","name":"Palimpsest","pil":HAS_PIL,"imagehash":HAS_IMAGEHASH,
+                     "cv2":HAS_CV2,"hachoir":HAS_HACHOIR,"reportlab":HAS_REPORTLAB,
+                     "numpy":HAS_NUMPY,"scipy":HAS_SCIPY,"ffmpeg":HAS_FFMPEG})
 
 def open_browser():
     time.sleep(1.2); webbrowser.open("http://127.0.0.1:7700")
@@ -1732,7 +2598,7 @@ if __name__ == "__main__":
  / ____/ /_/ / / / / / / / / /_/ (__  )  __(__  ) /_
 /_/    \__,_/_/_/_/ /_/ /_/ .___/____/\___/____/\__/
                          /_/
-    Metadata Forensics Toolkit v3.1
+    Metadata Forensics Toolkit v4.0
     https://ephemeradev.net | github.com/ephemera02
     """)
     print(f"[*] Database: {DB_PATH}")

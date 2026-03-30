@@ -1,6 +1,10 @@
 @echo off
-REM Palimpsest v3.0 - Build Script
+REM Palimpsest v4.0 - Build Script
 REM https://ephemeradev.net | github.com/ephemera02
+REM NOTE: pyinstaller is NOT on PATH. Uses full path below.
+REM If your pyinstaller is elsewhere, update PYINSTALLER_PATH.
+
+set PYINSTALLER_PATH=C:\Users\alyss\AppData\Roaming\Python\Python314\Scripts\pyinstaller.exe
 
 echo [*] Installing dependencies...
 pip install -r requirements.txt
@@ -16,7 +20,7 @@ if not exist "%FFMPEG_PATH%" (
     set FFMPEG_FLAG=--add-binary "C:\ffmpeg\bin\ffmpeg.exe;."
 )
 
-pyinstaller --onefile --noconsole --name Palimpsest ^
+"%PYINSTALLER_PATH%" --onefile --noconsole --name Palimpsest ^
     --icon "palimpsest_icon.ico" ^
     --add-data "palimpsest_ui.html;." ^
     --add-data "palimpsest_icon.ico;." ^
@@ -33,10 +37,11 @@ pyinstaller --onefile --noconsole --name Palimpsest ^
     --hidden-import=scipy.signal ^
     --hidden-import=scipy.io ^
     --hidden-import=reportlab ^
+    --exclude-module=PIL.AvifImagePlugin ^
     palimpsest.py
 
 echo.
 echo [*] Done! Executable: dist\Palimpsest.exe
-echo [*] Copy palimpsest_ui.html and palimpsest_icon.ico next to the exe.
+echo [*] Distribution: Palimpsest.exe + palimpsest_ui.html + palimpsest_icon.ico
 echo [*] ffmpeg is bundled. Users just run the exe. Nothing else to install.
 pause

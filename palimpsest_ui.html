@@ -24,6 +24,7 @@
 .mt{width:100%;border-collapse:collapse}.mt th{text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--fg3);border-bottom:1px solid var(--border);font-weight:600;position:sticky;top:0;background:var(--bg2);z-index:1}.mt td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:top}.mt tr:hover td{background:var(--bg3)}.mt tr{cursor:pointer}
 .tag{display:inline-flex;background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500;margin:1px}
 .drop-zone{border:2px dashed var(--border);border-radius:10px;padding:48px;text-align:center;color:var(--fg3);cursor:pointer;transition:all .2s}.drop-zone:hover{border-color:var(--accent);color:var(--fg2)}.drop-zone.dragover{border-color:var(--green);background:rgba(52,211,153,.05)}
+.progress-wrap{margin-top:16px;display:none}.progress-wrap.active{display:block}.progress-bar-outer{background:var(--bg1);border:1px solid var(--border);border-radius:6px;height:24px;overflow:hidden;position:relative}.progress-bar-inner{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:6px;transition:width .3s;width:0%}.progress-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--mono);color:var(--fg);z-index:1}.progress-status{font-size:12px;color:var(--fg2);margin-top:6px;text-align:center}
 .suspect-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}.suspect-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px;cursor:pointer;transition:all .15s}.suspect-card:hover{border-color:var(--accent);transform:translateY(-1px)}.suspect-card h4{font-size:16px;font-weight:600;margin-bottom:6px}.suspect-card .aliases{color:var(--fg2);font-size:12px;margin-bottom:8px}.suspect-card .meta{display:flex;gap:16px;font-size:12px;color:var(--fg3)}.suspect-card .meta .num{color:var(--fg);font-family:var(--mono);font-weight:500}
 .threat-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;text-transform:uppercase}.threat-high{background:var(--red2);color:var(--red)}.threat-medium{background:var(--orange2);color:var(--orange)}.threat-low{background:var(--yellow2);color:var(--yellow)}.threat-unknown{background:var(--bg4);color:var(--fg3)}
 .mode-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}.mode-btn{flex:1;padding:12px 16px;background:var(--bg1);color:var(--fg2);border:none;cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;text-align:center}.mode-btn.active{background:var(--accent);color:#fff}.mode-btn:hover:not(.active){background:var(--bg3)}
@@ -70,7 +71,7 @@
 <body>
 <div class="app">
 <div class="sidebar">
-  <div class="sidebar-brand"><img src="/icon.ico" style="width:28px;height:28px;border-radius:6px" onerror="this.outerHTML='<div class=lf>P</div>'"><h1>Palimpsest</h1><span>v3.1</span></div>
+  <div class="sidebar-brand"><img src="/icon.ico" style="width:28px;height:28px;border-radius:6px" onerror="this.outerHTML='<div class=lf>P</div>'"><h1>Palimpsest</h1><span>v4.0</span></div>
   <div class="sidebar-nav">
     <div class="ns">Overview</div>
     <div class="ni active" data-page="dashboard" data-tip="Your home base. See stats at a glance."><span class="ic">&#9673;</span> Dashboard</div>
@@ -88,8 +89,13 @@
     <div class="ni" data-page="hash_lookup" data-tip="Paste a hash to find matching evidence."><span class="ic">#</span> Hash Lookup</div>
     <div class="ns">Forensics</div>
     <div class="ni" data-page="forensics" data-tip="Deep forensic analysis: scene matching, audio, watermarks, encoding chains, screen recording detection."><span class="ic">&#128300;</span> Forensic Suite</div>
+    <div class="ni" data-page="enf" data-tip="Electrical Network Frequency analysis. Detects power grid frequency (50/60Hz) to narrow geographic region."><span class="ic">&#9889;</span> ENF Analysis</div>
     <div class="ni" data-page="scene_match" data-tip="Find videos filmed in the same location."><span class="ic">&#127968;</span> Scene Matching</div>
     <div class="ni" data-page="audio_match" data-tip="Find videos with matching audio environments."><span class="ic">&#127925;</span> Audio Matching</div>
+    <div class="ni" data-page="metadata_groups" data-tip="Group evidence by encoder, comment, codec, resolution to map distribution chains."><span class="ic">&#128202;</span> Metadata Groups</div>
+    <div class="ns">AI Analysis</div>
+    <div class="ni" data-page="ai_vision" data-tip="Send extracted frames to Claude/GPT/Gemini for forensic analysis. Identifies outlets, text, objects, region clues."><span class="ic">&#129504;</span> AI Vision</div>
+    <div class="ni" data-page="ai_settings" data-tip="Configure AI provider, API key, model, and view cost tracking."><span class="ic">&#9881;</span> AI Settings</div>
     <div class="ns">Export</div>
     <div class="ni" data-page="export" data-tip="Export as JSON, PDF, CSV, HTML, or Markdown. Import from other Palimpsest instances."><span class="ic">&#8599;</span> Export &amp; Import</div>
     <div class="ns">Help</div>
@@ -114,14 +120,18 @@
 <div class="mode-toggle" data-tip="Simple mode explains everything in plain English. Advanced mode shows raw technical data."><button class="mode-btn active" onclick="setMode('simple',this)">Simple Mode</button><button class="mode-btn" onclick="setMode('advanced',this)">Advanced Mode</button></div>
 <div class="card"><div class="drop-zone" id="dropZone" data-tip="Drag a file here, or click to open a file picker. No size limit." onclick="document.getElementById('fileInput').click()"><div style="font-size:36px;margin-bottom:8px">&#128206;</div><div style="font-size:15px;font-weight:500;margin-bottom:4px">Drop file here or click to browse</div><div style="font-size:12px">Videos (MP4, AVI, MOV, MKV, WebM, MTS) and images (JPG, PNG, TIFF, HEIC). No size limit.</div></div>
 <input type="file" id="fileInput" style="display:none" accept="image/*,video/*,.mkv,.avi,.mov,.mts,.m2ts,.ts" onchange="analyzeFile(this.files[0])">
-<div class="fr" style="margin-top:12px"><div class="fg"><label>Link to Suspect</label><select class="fi" id="analyzeSuspect" data-tip="Optionally connect this file to a suspect you've created."><option value="">None</option></select></div><div class="fg"><label>Tags</label><input class="fi" id="analyzeTags" placeholder="comma-separated tags" data-tip="Add your own labels like 'telegram', 'priority', etc."></div></div></div>
+<div class="fr" style="margin-top:12px"><div class="fg"><label>Link to Suspect</label><select class="fi" id="analyzeSuspect" data-tip="Optionally connect this file to a suspect you've created."><option value="">None</option></select></div><div class="fg"><label>Tags</label><input class="fi" id="analyzeTags" placeholder="comma-separated tags" data-tip="Add your own labels like 'telegram', 'priority', etc."></div></div>
+<div class="progress-wrap" id="analyzeProgress"><div class="progress-bar-outer"><div class="progress-bar-inner" id="analyzeBar"></div><div class="progress-text" id="analyzeBarText">0%</div></div><div class="progress-status" id="analyzeStatus">Uploading...</div></div>
+</div>
 <div id="analysisResult" style="display:none"></div></div>
 
 <!-- BATCH -->
 <div class="page" id="pg-batch"><div class="ph"><h2>Batch Process</h2><p>Analyze many files at once. Great for dumping an entire folder.</p></div>
 <div class="card"><div class="drop-zone" id="batchDrop" onclick="document.getElementById('batchInput').click()"><div style="font-size:36px;margin-bottom:8px">&#128230;</div><div style="font-size:15px;font-weight:500">Drop multiple files or click to browse</div><div style="font-size:12px;margin-top:4px">Select as many as you want. Each one gets fully analyzed.</div></div>
 <input type="file" id="batchInput" style="display:none" multiple accept="image/*,video/*,.mkv,.avi,.mov" onchange="batchAnalyze(this.files)">
-<div class="fr" style="margin-top:12px"><div class="fg"><label>Link all to Suspect</label><select class="fi" id="batchSuspect"><option value="">None</option></select></div></div></div>
+<div class="fr" style="margin-top:12px"><div class="fg"><label>Link all to Suspect</label><select class="fi" id="batchSuspect"><option value="">None</option></select></div></div>
+<div class="progress-wrap" id="batchProgress"><div class="progress-bar-outer"><div class="progress-bar-inner" id="batchBar"></div><div class="progress-text" id="batchBarText">0%</div></div><div class="progress-status" id="batchStatus">Uploading...</div></div>
+</div>
 <div id="batchResults"></div></div>
 
 <!-- COMPARE -->
@@ -214,6 +224,117 @@
   <div id="audioMatchResults"></div>
 </div>
 
+<!-- ENF ANALYSIS -->
+<div class="page" id="pg-enf">
+  <div class="ph"><h2>&#9889; ENF Analysis</h2><p>Electrical Network Frequency -- detect the power grid frequency (50Hz or 60Hz) embedded in audio and video to determine geographic region. Court-accepted forensic technique.</p></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card">
+      <h3>How ENF Works</h3>
+      <p style="color:var(--fg2);font-size:13px;line-height:1.6">AC power grids oscillate at either 50Hz (Europe, Asia, Africa, Oceania) or 60Hz (Americas, parts of East Asia). This frequency gets embedded in recordings through electromagnetic interference from power lines and through indoor lighting flicker. ENF analysis extracts this signal to narrow geographic region without any metadata.</p>
+    </div>
+    <div class="card" id="enfSummaryCard">
+      <h3>ENF Summary</h3>
+      <div id="enfSummary" style="color:var(--fg2);font-size:13px">Run forensics to generate ENF data.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>ENF Results by Evidence</h3>
+    <div id="enfResults">
+      <p style="color:var(--fg3);text-align:center;padding:20px">Run forensics on your evidence (Forensic Suite > Batch Forensics) to generate ENF analysis data.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>ENF Grid Matches</h3>
+    <p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Videos recorded on the same power grid at the same time will have matching ENF fluctuation patterns.</p>
+    <button class="btn bp" onclick="loadEnfMatches()" data-tip="Find videos with matching ENF traces">Find ENF Matches</button>
+    <div id="enfMatchResults" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- METADATA GROUPS -->
+<div class="page" id="pg-metadata_groups">
+  <div class="ph"><h2>&#128202; Metadata Groups</h2><p>Group evidence by shared metadata fields to map the distribution pipeline. Who recorded, who re-encoded, who distributed.</p></div>
+  <button class="btn bp" onclick="loadMetadataGroups()" style="margin-bottom:16px" data-tip="Groups all evidence by comment, encoder, codec/resolution/fps, and file size">Analyze Distribution Chain</button>
+  <div id="metadataGroupResults"></div>
+</div>
+
+<!-- AI VISION -->
+<div class="page" id="pg-ai_vision">
+  <div class="ph"><h2>&#129504; AI Vision Analysis</h2><p>Send extracted frames to an AI vision model (Claude, GPT, Gemini) for forensic analysis. Identifies power outlets, visible text, room features, and geographic clues.</p></div>
+  <div class="card">
+    <h3>Analyze Evidence</h3>
+    <p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Select an evidence item with extracted frames. The AI will analyze each frame for forensic indicators.</p>
+    <div class="fr">
+      <div class="fg"><label>Evidence Item</label><select class="fi" id="aiTarget"></select></div>
+      <div class="fg" style="flex:0;justify-content:flex-end"><label>&nbsp;</label><button class="btn bg" onclick="aiEstimate()" data-tip="Show cost estimate before running">Estimate Cost</button></div>
+      <div class="fg" style="flex:0;justify-content:flex-end"><label>&nbsp;</label><button class="btn bp" onclick="aiAnalyze()" data-tip="Sends frames to the configured AI provider">Run AI Analysis</button></div>
+    </div>
+    <div id="aiEstimateResult" style="margin-top:8px"></div>
+    <div class="progress-wrap" id="aiProgress"><div class="progress-bar-outer"><div class="progress-bar-inner" id="aiBar"></div><div class="progress-text" id="aiBarText">0%</div></div><div class="progress-status" id="aiStatus">Analyzing frames...</div></div>
+  </div>
+  <div id="aiResults" style="margin-top:16px"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Previous AI Results</h3>
+    <p style="color:var(--fg2);font-size:13px;margin-bottom:12px">Select an evidence item to view stored AI analysis results.</p>
+    <div class="fr">
+      <div class="fg"><label>Evidence Item</label><select class="fi" id="aiResultsTarget"></select></div>
+      <div class="fg" style="flex:0;justify-content:flex-end"><label>&nbsp;</label><button class="btn bg" onclick="loadAiResults()" data-tip="Load stored results">Load Results</button></div>
+    </div>
+    <div id="aiStoredResults" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- AI SETTINGS -->
+<div class="page" id="pg-ai_settings">
+  <div class="ph"><h2>&#9881; AI Settings</h2><p>Configure your AI provider, API key, and model for vision analysis.</p></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <h3>Provider Configuration</h3>
+      <div class="fg" style="margin-bottom:12px">
+        <label>Provider</label>
+        <select class="fi" id="aiProvider" onchange="onProviderChange()">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="google">Google (Gemini)</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="custom">Custom Endpoint</option>
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label>Model</label>
+        <select class="fi" id="aiModel"></select>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label>API Key</label>
+        <input class="fi" type="password" id="aiApiKey" placeholder="Enter your API key" data-tip="Stored locally. Never transmitted except to the chosen provider.">
+      </div>
+      <div class="fg" id="aiCustomEndpointWrap" style="margin-bottom:12px;display:none">
+        <label>Custom Endpoint URL</label>
+        <input class="fi" id="aiCustomEndpoint" placeholder="https://your-api.com/v1/chat/completions">
+      </div>
+      <div class="br">
+        <button class="btn bp" onclick="saveAiSettings()">Save Settings</button>
+        <button class="btn bg" onclick="testAiConnection()">Test Connection</button>
+      </div>
+      <div id="aiTestResult" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3>Analysis Prompt</h3>
+      <p style="color:var(--fg2);font-size:13px;margin-bottom:8px">The prompt sent with each frame. Customize for your investigation focus.</p>
+      <div class="fg"><textarea class="fi" id="aiPrompt" rows="10" style="font-size:12px;line-height:1.5"></textarea></div>
+      <button class="btn bg" onclick="saveAiSettings()" style="margin-top:8px">Save Prompt</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Cost Tracking</h3>
+    <div id="aiCostTracking" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div class="dash-stat"><div class="num" id="aiTotalTokens">0</div><div class="lbl">Total Tokens</div></div>
+      <div class="dash-stat"><div class="num" id="aiTotalCost">$0.00</div><div class="lbl">Total Cost</div></div>
+      <div class="dash-stat"><div class="num" id="aiCurrentProvider">--</div><div class="lbl">Current Provider</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- EXPORT -->
 <div class="page" id="pg-export"><div class="ph"><h2>Export &amp; Import</h2><p>Download evidence packages or import from another Palimpsest instance.</p></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -271,6 +392,10 @@
       <li><b>Forensic Suite</b> -- Deep analysis beyond basic metadata. Scene analysis builds environment fingerprints. Watermark detection finds channel stamps and bot overlays. Encoding chain analysis estimates whether a file is original or a re-encoded copy. Screen recording detection identifies Telegram screen grabs. Lighting analysis characterizes the environment. Audio fingerprinting matches videos by ambient sound.</li>
       <li><b>Scene Matching</b> -- After running forensics, compares environment fingerprints across your whole library to find videos filmed in the same room or location.</li>
       <li><b>Audio Matching</b> -- Compares audio fingerprints to find videos recorded in the same environment. Same background noise = same room. Requires ffmpeg.</li>
+      <li><b>ENF Analysis</b> -- Electrical Network Frequency. AC power grids oscillate at 50Hz (Europe/Asia/Africa/Oceania) or 60Hz (Americas/parts of East Asia). This frequency gets embedded in recordings through electromagnetic interference and indoor lighting flicker. ENF analysis extracts this signal to narrow geographic region with zero metadata required. Court-accepted forensic science.</li>
+      <li><b>Metadata Groups</b> -- Groups all evidence by shared metadata fields (comment, encoder, codec+resolution+fps, file size) to map the distribution pipeline. Same comment = same recording tool. Same encoder = same encoding software. Same chain = same batch processing.</li>
+      <li><b>AI Vision</b> -- Sends extracted frames to Claude, GPT, or Gemini for forensic analysis. The AI identifies power outlet types (narrows country), visible text and language, room features, lighting fixtures, vegetation, and other geographic clues. Shows cost estimate before running. Supports Anthropic, OpenAI, Google, OpenRouter, and custom endpoints.</li>
+      <li><b>AI Settings</b> -- Configure your AI provider, API key, model, and custom analysis prompt. Tracks total token usage and cost across all analyses.</li>
     </ul>
   </div>
 
@@ -331,7 +456,7 @@ let currentMode='simple',suspects=[],leafletMap=null,evPage=1;
 
 // --- Navigation ---
 document.querySelectorAll('.ni[data-page]').forEach(n=>{n.addEventListener('click',()=>{goToPage(n.dataset.page);});});
-function goToPage(p){document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));const nav=document.querySelector(`.ni[data-page="${p}"]`);if(nav)nav.classList.add('active');document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));const pg=document.getElementById('pg-'+p);if(pg)pg.classList.add('active');if(p==='dashboard')loadDashboard();if(p==='evidence')loadEvidence();if(p==='suspects')loadSuspects();if(p==='map')loadMap();if(p==='compare')loadCompareOptions();if(p==='timeline')loadTimeline();if(p==='forensics')loadForensicTargets();if(['analyze','batch','export'].includes(p))loadSuspectSelects();}
+function goToPage(p){document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));const nav=document.querySelector(`.ni[data-page="${p}"]`);if(nav)nav.classList.add('active');document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));const pg=document.getElementById('pg-'+p);if(pg)pg.classList.add('active');if(p==='dashboard')loadDashboard();if(p==='evidence')loadEvidence();if(p==='suspects')loadSuspects();if(p==='map')loadMap();if(p==='compare')loadCompareOptions();if(p==='timeline')loadTimeline();if(p==='forensics')loadForensicTargets();if(p==='enf')loadEnfPage();if(p==='metadata_groups'){/* click button to load */}if(p==='ai_vision')loadAiTargets();if(p==='ai_settings')loadAiSettings();if(['analyze','batch','export'].includes(p))loadSuspectSelects();}
 
 // --- Utilities ---
 function toast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+type;setTimeout(()=>t.className='toast',3000);}
@@ -472,7 +597,47 @@ async function loadSuspectSelects(){suspects=await fetch('/api/suspects').then(r
 const dz=document.getElementById('dropZone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files.length)analyzeFile(e.dataTransfer.files[0]);});
 const bd=document.getElementById('batchDrop');bd.addEventListener('dragover',e=>{e.preventDefault();bd.classList.add('dragover');});bd.addEventListener('dragleave',()=>bd.classList.remove('dragover'));bd.addEventListener('drop',e=>{e.preventDefault();bd.classList.remove('dragover');if(e.dataTransfer.files.length)batchAnalyze(e.dataTransfer.files);});
 
-async function analyzeFile(file){if(!file)return;const fd=new FormData();fd.append('file',file);const sid=document.getElementById('analyzeSuspect').value;if(sid)fd.append('suspect_id',sid);fd.append('tags',document.getElementById('analyzeTags').value);toast('Analyzing '+file.name+'... hang tight');const r=await fetch('/api/analyze',{method:'POST',body:fd}).then(r=>r.json());if(r.error){toast(r.error,'error');return;}renderAnalysis(r);toast('Analysis complete!');}
+async function analyzeFile(file){
+  if(!file)return;
+  const fd=new FormData();fd.append('file',file);
+  const sid=document.getElementById('analyzeSuspect').value;if(sid)fd.append('suspect_id',sid);
+  fd.append('tags',document.getElementById('analyzeTags').value);
+  // Show progress
+  const pw=document.getElementById('analyzeProgress');pw.classList.add('active');
+  const bar=document.getElementById('analyzeBar');
+  const barText=document.getElementById('analyzeBarText');
+  const status=document.getElementById('analyzeStatus');
+  bar.style.width='0%';barText.textContent='0%';
+  status.textContent=`Uploading and hashing ${file.name} (${fmtSize(file.size)})...`;
+  // Use XHR for upload progress
+  const xhr=new XMLHttpRequest();
+  xhr.upload.addEventListener('progress',(e)=>{
+    if(e.lengthComputable){
+      const pct=Math.round((e.loaded/e.total)*90); // 90% for upload, 10% for processing
+      bar.style.width=pct+'%';barText.textContent=pct+'%';
+      status.textContent=`Uploading + hashing: ${fmtSize(e.loaded)} / ${fmtSize(e.total)}`;
+    }
+  });
+  xhr.upload.addEventListener('load',()=>{
+    bar.style.width='92%';barText.textContent='92%';
+    status.textContent='Upload and hashing complete. Extracting metadata...';
+  });
+  xhr.addEventListener('load',()=>{
+    bar.style.width='100%';barText.textContent='100%';
+    status.textContent='Done!';
+    setTimeout(()=>pw.classList.remove('active'),2000);
+    try{
+      const r=JSON.parse(xhr.responseText);
+      if(r.error){toast(r.error,'error');return;}
+      renderAnalysis(r);toast('Analysis complete!');
+    }catch(e){toast('Error parsing response','error');}
+  });
+  xhr.addEventListener('error',()=>{
+    pw.classList.remove('active');toast('Upload failed','error');
+  });
+  xhr.open('POST','/api/analyze');
+  xhr.send(fd);
+}
 
 function renderAnalysis(r){
   const el=document.getElementById('analysisResult');el.style.display='block';const m=r.metadata||{},s=m.stripping||{},simple=currentMode==='simple';
@@ -481,6 +646,7 @@ function renderAnalysis(r){
   if(m.dimensions)h+=`<span>${m.dimensions.width}x${m.dimensions.height}</span>`;
   if(m.duration)h+=`<span>Duration: <b style="color:var(--fg)">${fmtDur(m.duration)}</b></span>`;
   if(m.fps)h+=`<span>${m.fps} fps</span>`;h+='</div>';
+  if(r.media_type==='video')h+='<div style="color:var(--accent);font-size:12px;padding:6px 0;font-style:italic">Frames and video preview are being generated in the background. Open this file from the Evidence Library in a moment to see them.</div>';
   if(s.detected){h+='<div class="strip-warn">&#9888; <b>Metadata anomalies detected</b> -- this file may have had its metadata tampered with or stripped.<br>';(s.indicators||[]).forEach(i=>h+='&bull; '+i+'<br>');h+='</div>';}
   else{h+='<div class="strip-ok">&#10003; No signs of metadata stripping. This file appears unmodified.</div>';}
   h+='<h3 style="margin-top:16px" data-tip="Unique fingerprints for this file. MD5/SHA-256 identify exact copies. pHash identifies visually similar files.">Hashes (file fingerprints)</h3><div class="hash-grid">';
@@ -494,7 +660,48 @@ function renderAnalysis(r){
   h+='</div>';el.innerHTML=h;
 }
 
-async function batchAnalyze(files){if(!files.length)return;const fd=new FormData();for(let f of files)fd.append('files',f);const sid=document.getElementById('batchSuspect').value;if(sid)fd.append('suspect_id',sid);toast(`Processing ${files.length} files...`);const r=await fetch('/api/analyze/batch',{method:'POST',body:fd}).then(r=>r.json());let h=`<div class="card"><h3>&#10003; Processed ${r.count} files</h3><table class="mt"><thead><tr><th>File</th><th>Type</th><th>Duration</th><th>Stripped</th></tr></thead><tbody>`;r.results.forEach(e=>{h+=`<tr><td>${e.file_name}</td><td>${e.media_type}</td><td>${fmtDur(e.duration)}</td><td>${e.stripping_detected?'<span style="color:var(--red)">YES</span>':'<span style="color:var(--green)">No</span>'}</td></tr>`;});h+='</tbody></table></div>';document.getElementById('batchResults').innerHTML=h;toast(`${r.count} files analyzed!`);}
+async function batchAnalyze(files){
+  if(!files.length)return;
+  const fd=new FormData();let totalSize=0;
+  for(let f of files){fd.append('files',f);totalSize+=f.size;}
+  const sid=document.getElementById('batchSuspect').value;if(sid)fd.append('suspect_id',sid);
+  const pw=document.getElementById('batchProgress');pw.classList.add('active');
+  const bar=document.getElementById('batchBar');
+  const barText=document.getElementById('batchBarText');
+  const status=document.getElementById('batchStatus');
+  bar.style.width='0%';barText.textContent='0%';
+  status.textContent=`Uploading ${files.length} files (${fmtSize(totalSize)})...`;
+  const xhr=new XMLHttpRequest();
+  xhr.upload.addEventListener('progress',(e)=>{
+    if(e.lengthComputable){
+      const pct=Math.round((e.loaded/e.total)*85);
+      bar.style.width=pct+'%';barText.textContent=pct+'%';
+      status.textContent=`Uploading: ${fmtSize(e.loaded)} / ${fmtSize(e.total)}`;
+    }
+  });
+  xhr.upload.addEventListener('load',()=>{
+    bar.style.width='88%';barText.textContent='88%';
+    status.textContent=`Upload complete. Analyzing ${files.length} files (metadata, hashes, frames)...`;
+  });
+  xhr.addEventListener('load',()=>{
+    bar.style.width='100%';barText.textContent='100%';
+    status.textContent='Done!';
+    setTimeout(()=>pw.classList.remove('active'),2000);
+    try{
+      const r=JSON.parse(xhr.responseText);
+      let h=`<div class="card"><h3>&#10003; Processed ${r.count} files</h3><table class="mt"><thead><tr><th>File</th><th>Type</th><th>Duration</th><th>Stripped</th></tr></thead><tbody>`;
+      r.results.forEach(e=>{h+=`<tr><td>${e.file_name}</td><td>${e.media_type}</td><td>${fmtDur(e.duration)}</td><td>${e.stripping_detected?'<span style="color:var(--red)">YES</span>':'<span style="color:var(--green)">No</span>'}</td></tr>`;});
+      h+='</tbody></table></div>';
+      document.getElementById('batchResults').innerHTML=h;
+      toast(`${r.count} files analyzed!`);
+    }catch(e){toast('Error parsing response','error');}
+  });
+  xhr.addEventListener('error',()=>{
+    pw.classList.remove('active');toast('Upload failed','error');
+  });
+  xhr.open('POST','/api/analyze/batch');
+  xhr.send(fd);
+}
 
 async function loadEvidence(){const q=document.getElementById('evSearch').value,mt=document.getElementById('evType').value,fl=document.getElementById('evFilter').value;let url=`/api/evidence?page=${evPage}&per_page=30`;if(q)url+='&q='+encodeURIComponent(q);if(mt)url+='&media_type='+mt;if(fl==='gps')url+='&has_gps=1';if(fl==='stripped')url+='&stripped=1';const r=await fetch(url).then(r=>r.json());let h='';r.items.forEach(e=>{const sus=suspects.find(s=>s.id===e.suspect_id);h+=`<tr onclick="showEvDetail(${e.id})"><td><img class="ev-thumb" src="/thumbnails/${e.id}.jpg" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22><rect fill=%22%23232738%22 width=%2248%22 height=%2248%22 rx=%226%22/></svg>'"></td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.file_name}</td><td>${e.media_type==='video'?'<span class="video-badge">video</span>':e.media_type}</td><td style="font-family:var(--mono);font-size:12px">${fmtDur(e.duration)}</td><td style="font-size:12px;color:var(--fg2)">${e.codec||'-'}</td><td style="font-size:12px;font-family:var(--mono);color:var(--fg2)">${e.original_date||e.creation_date||'-'}</td><td>${e.has_gps?'<span style="color:var(--green)">&#10003;</span>':'-'}</td><td>${e.stripping_detected?'<span style="color:var(--red)">&#9888;</span>':'-'}</td><td>${sus?'<span class="tag">'+sus.name+'</span>':'-'}</td><td><button class="btn bd btn-sm" onclick="event.stopPropagation();deleteEvidence(${e.id})">&#10005;</button></td></tr>`;});
 document.getElementById('evTable').innerHTML=h||'<tr><td colspan="10" style="text-align:center;color:var(--fg3);padding:24px">No evidence found. Import some files from the File Analyzer!</td></tr>';document.getElementById('evPagination').textContent=`Page ${r.page} -- ${r.total} items`;}
@@ -573,6 +780,7 @@ h+=`<div style="display:flex;gap:12px;margin:8px 0;font-size:13px;color:var(--fg
 if(r.duration)h+=`<span>Duration: ${fmtDur(r.duration)}</span>`;if(r.fps)h+=`<span>${r.fps} fps</span>`;if(r.codec)h+=`<span>Codec: ${r.codec}</span>`;h+='</div>';
 if(r.stripping_detected){h+='<div class="strip-warn">&#9888; Metadata anomalies detected<br>';(r.stripping_indicators||[]).forEach(i=>h+='&bull; '+i+'<br>');h+='</div>';}
 if(r.frames&&r.frames.length){h+='<h3 style="margin-top:12px" data-tip="Sample frames extracted at even intervals throughout the video">Extracted Frames</h3><div class="frame-grid">';r.frames.forEach(f=>{const ts=Math.floor(f.timestamp_sec/60)+':'+Math.floor(f.timestamp_sec%60).toString().padStart(2,'0');h+=`<div><img src="/frames/${f.file_path}" onclick="window.open('/frames/${f.file_path}')"><div class="frame-ts">${ts}${f.phash?' &bull; '+f.phash.substring(0,8):''}</div></div>`;});h+='</div>';}
+else if(r.media_type==='video'){h+='<div style="color:var(--fg3);font-size:12px;font-style:italic;padding:8px 0">Frames are being extracted in the background. Close and reopen this item in a moment to see them.</div>';}
 h+='<h3 style="margin-top:12px">Hashes</h3><div class="hash-grid">';['md5','sha256','phash','dhash'].forEach(k=>{if(r[k])h+=`<div class="hash-item"><div class="hl">${k.toUpperCase()}</div><div class="hv">${r[k]}</div></div>`;});h+='</div>';
 if(r.camera_make||r.camera_model)h+=`<p style="margin-top:12px;font-size:13px">Camera: <b>${r.camera_make} ${r.camera_model}</b></p>`;
 if(r.original_date||r.creation_date)h+=`<p style="font-size:13px">Date: <b>${r.original_date||r.creation_date}</b></p>`;
@@ -936,6 +1144,51 @@ function renderForensicResults(r){
     h+='</div>';
   }
 
+  // ENF Analysis
+  if(results.enf){
+    const enf=results.enf;
+    const freqColor=enf.detected_freq===50?'var(--green)':enf.detected_freq===60?'var(--purple)':'var(--fg3)';
+    const confColor=(enf.confidence||0)>60?'var(--green)':(enf.confidence||0)>30?'var(--yellow)':'var(--red)';
+    h+='<div class="card"><h3 data-tip="Electrical Network Frequency -- detects power grid frequency (50/60Hz) to determine recording region">&#9889; ENF Analysis</h3>';
+    if(enf.detected_freq){
+      h+=`<div style="display:flex;gap:20px;margin-bottom:12px;align-items:center">
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:${freqColor}">${enf.detected_freq} Hz</div>
+        <div>
+          <div style="font-size:13px;color:var(--fg)">${enf.grid_region||''}</div>
+          <div style="font-size:12px;color:${confColor};font-weight:600">Confidence: ${enf.confidence}% | Source: ${enf.source||'audio'}</div>
+        </div>
+      </div>`;
+    } else {
+      h+='<div style="color:var(--fg3);font-size:13px;padding:8px 0">No clear ENF signal detected.</div>';
+    }
+    const ed=enf.details||{};
+    if(ed.score_50hz!==undefined)h+=`<div class="meta-field"><span class="mf-key">50Hz Score</span><span class="mf-val">${ed.score_50hz} (SNR: ${ed.snr_50hz||'--'})</span></div>`;
+    if(ed.score_60hz!==undefined)h+=`<div class="meta-field"><span class="mf-key">60Hz Score</span><span class="mf-val">${ed.score_60hz} (SNR: ${ed.snr_60hz||'--'})</span></div>`;
+    if(ed.noise_floor!==undefined)h+=`<div class="meta-field"><span class="mf-key">Noise Floor</span><span class="mf-val">${ed.noise_floor}</span></div>`;
+    if(ed.video_lum_50hz!==undefined)h+=`<div class="meta-field"><span class="mf-key">Video Luminance 50Hz</span><span class="mf-val">${ed.video_lum_50hz}</span></div>`;
+    if(ed.video_lum_60hz!==undefined)h+=`<div class="meta-field"><span class="mf-key">Video Luminance 60Hz</span><span class="mf-val">${ed.video_lum_60hz}</span></div>`;
+    if(ed.video_enf_note)h+=`<div class="meta-field"><span class="mf-key">Video ENF Note</span><span class="mf-val" style="font-size:11px">${ed.video_enf_note}</span></div>`;
+    // ENF trace sparkline
+    if(enf.enf_trace&&enf.enf_trace.length>2){
+      h+='<div style="margin-top:12px"><div style="font-size:12px;color:var(--fg3);margin-bottom:4px">ENF trace over time:</div>';
+      const vals=enf.enf_trace.map(p=>p.freq);
+      const mn=Math.min(...vals),mx=Math.max(...vals);
+      const range=mx-mn||1;
+      const w=400,ht=60;
+      h+=`<svg width="${w}" height="${ht}" style="background:var(--bg1);border-radius:6px;border:1px solid var(--border);width:100%;max-width:${w}px">`;
+      let pts=enf.enf_trace.map((p,i)=>{
+        const x=i/(enf.enf_trace.length-1)*w;
+        const y=ht-4-(((p.freq-mn)/range)*(ht-8));
+        return `${x},${y}`;
+      }).join(' ');
+      h+=`<polyline points="${pts}" fill="none" stroke="${freqColor}" stroke-width="2"/>`;
+      h+='</svg>';
+      h+=`<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--fg3);font-family:var(--mono)"><span>${mn.toFixed(2)} Hz</span><span>${mx.toFixed(2)} Hz</span></div>`;
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+
   el.innerHTML=h;
 }
 
@@ -972,6 +1225,329 @@ async function loadAudioMatches(){
     h='<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No audio matches found. Make sure you\'ve run forensics first and that ffmpeg is installed for audio extraction.</div>';
   }
   document.getElementById('audioMatchResults').innerHTML=h;
+}
+
+// ===== V4.0: ENF ANALYSIS =====
+async function loadEnfPage(){
+  // Load summary
+  try {
+    const r=await fetch('/api/enf/results').then(r=>r.json());
+    let hz50=0,hz60=0,ambig=0,total=r.length;
+    r.forEach(e=>{if(e.detected_freq===50)hz50++;else if(e.detected_freq===60)hz60++;else ambig++;});
+    let sh='';
+    if(total===0){
+      sh='<p style="color:var(--fg3)">No ENF data yet. Run forensics on your evidence first.</p>';
+    } else {
+      sh=`<div class="dash-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="dash-stat"><div class="num">${total}</div><div class="lbl">Analyzed</div></div>
+        <div class="dash-stat"><div class="num" style="color:var(--green)">${hz50}</div><div class="lbl">50Hz (EU/Asia/Africa)</div></div>
+        <div class="dash-stat"><div class="num" style="color:var(--purple)">${hz60}</div><div class="lbl">60Hz (Americas)</div></div>
+        <div class="dash-stat"><div class="num" style="color:var(--fg3)">${ambig}</div><div class="lbl">Ambiguous</div></div>
+      </div>`;
+    }
+    document.getElementById('enfSummary').innerHTML=sh;
+
+    // Results table
+    let h='';
+    if(r.length){
+      h+='<table class="mt"><thead><tr><th>File</th><th>Freq</th><th>Grid Region</th><th>Confidence</th><th>Source</th><th>ENF Trace</th><th>Flags</th></tr></thead><tbody>';
+      r.forEach(e=>{
+        const freqColor=e.detected_freq===50?'var(--green)':e.detected_freq===60?'var(--purple)':'var(--fg3)';
+        const confColor=e.confidence>60?'var(--green)':e.confidence>30?'var(--yellow)':'var(--red)';
+        const flagsHtml=e.flags.map(f=>`<div style="font-size:11px;color:var(--fg2);line-height:1.4">- ${f}</div>`).join('');
+        // Mini SVG sparkline for ENF trace
+        let spark='';
+        if(e.enf_trace&&e.enf_trace.length>2){
+          const vals=e.enf_trace.map(p=>p.freq);
+          const mn=Math.min(...vals),mx=Math.max(...vals);
+          const range=mx-mn||1;
+          const w=120,ht=30;
+          let pts=e.enf_trace.map((p,i)=>{
+            const x=i/(e.enf_trace.length-1)*w;
+            const y=ht-(((p.freq-mn)/range)*ht);
+            return `${x},${y}`;
+          }).join(' ');
+          spark=`<svg width="${w}" height="${ht}" style="background:var(--bg1);border-radius:4px;border:1px solid var(--border)"><polyline points="${pts}" fill="none" stroke="${freqColor}" stroke-width="1.5"/></svg>
+          <div style="font-size:9px;color:var(--fg3);font-family:var(--mono)">${mn.toFixed(1)}-${mx.toFixed(1)} Hz</div>`;
+        }
+        h+=`<tr onclick="showEvDetail(${e.evidence_id})" style="cursor:pointer">
+          <td>${e.file_name}</td>
+          <td style="font-family:var(--mono);color:${freqColor};font-weight:600">${e.detected_freq||'--'} Hz</td>
+          <td style="font-size:12px">${e.grid_region||'--'}</td>
+          <td><b style="color:${confColor}">${e.confidence}%</b></td>
+          <td style="font-size:12px;color:var(--fg2)">${e.source||'--'}</td>
+          <td>${spark}</td>
+          <td>${flagsHtml}</td>
+        </tr>`;
+      });
+      h+='</tbody></table>';
+    }
+    document.getElementById('enfResults').innerHTML=h||'<p style="color:var(--fg3);text-align:center;padding:20px">No ENF results yet.</p>';
+  } catch(e){ console.error('ENF load error:',e); }
+}
+
+async function loadEnfMatches(){
+  toast('Comparing ENF traces...');
+  const r=await fetch('/api/enf/matches').then(r=>r.json());
+  let h='';
+  if(r.length){
+    h+='<table class="mt"><thead><tr><th>File A</th><th>File B</th><th>Grid Freq</th><th>Region</th><th>Confidence</th></tr></thead><tbody>';
+    r.forEach(m=>{
+      const freqColor=m.freq===50?'var(--green)':'var(--purple)';
+      h+=`<tr>
+        <td style="cursor:pointer" onclick="showEvDetail(${m.id_a})">${m.name_a}</td>
+        <td style="cursor:pointer" onclick="showEvDetail(${m.id_b})">${m.name_b}</td>
+        <td style="font-family:var(--mono);color:${freqColor};font-weight:600">${m.freq} Hz</td>
+        <td style="font-size:12px">${m.grid||''}</td>
+        <td style="font-size:12px;color:var(--fg2)">${m.confidence_a}% / ${m.confidence_b}%</td>
+      </tr>`;
+    });
+    h+='</tbody></table>';
+  } else {
+    h='<p style="color:var(--fg3);text-align:center;padding:12px">No matching ENF traces found. Need 2+ videos with ENF data on the same grid.</p>';
+  }
+  document.getElementById('enfMatchResults').innerHTML=h;
+}
+
+// ===== V4.0: METADATA GROUPS =====
+async function loadMetadataGroups(){
+  toast('Grouping metadata...');
+  const r=await fetch('/api/metadata/groups').then(r=>r.json());
+  let h='';
+  const sections=[
+    {key:'comment',title:'By Comment Field',desc:'Same comment = same recording tool or distribution source',icon:'&#128172;'},
+    {key:'encoder',title:'By Encoder',desc:'Same encoder = same encoding software in the pipeline',icon:'&#128296;'},
+    {key:'pipeline',title:'By Codec + Resolution + FPS',desc:'Same chain = same batch processing or distribution pipeline',icon:'&#128279;'},
+    {key:'size',title:'By File Size Range',desc:'Similar sizes may indicate same batch processing parameters',icon:'&#128200;'}
+  ];
+  sections.forEach(sec=>{
+    const data=r[sec.key];
+    if(!data)return;
+    // Handle both object and array formats
+    const entries=Array.isArray(data)?data:Object.entries(data).map(([k,v])=>({value:k,count:v.count,items:v.items}));
+    if(!entries.length)return;
+    h+=`<div class="card"><h3>${sec.icon} ${sec.title}</h3><p style="color:var(--fg2);font-size:13px;margin-bottom:12px">${sec.desc}</p>`;
+    entries.forEach(g=>{
+      const val=g.value||g[0];
+      const count=g.count||(g[1]&&g[1].count)||0;
+      const items=g.items||(g[1]&&g[1].items)||[];
+      const pct=r.comment?Math.round(count/Math.max(entries.reduce((s,x)=>s+(x.count||(x[1]&&x[1].count)||0),0),1)*100):0;
+      h+=`<div style="margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-family:var(--mono);font-size:12px;color:var(--fg);word-break:break-all;flex:1">${val}</span>
+          <span class="badge" style="margin-left:12px">${count} files</span>
+        </div>`;
+      if(items.length){
+        h+=`<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+        items.slice(0,10).forEach(item=>{
+          const name=item.file_name||item.name||'';
+          const id=item.id||0;
+          h+=`<span style="font-size:10px;color:var(--fg3);background:var(--bg1);padding:2px 6px;border-radius:4px;cursor:pointer" onclick="showEvDetail(${id})" title="${name}">${name.length>30?name.slice(0,30)+'...':name}</span>`;
+        });
+        if(items.length>10)h+=`<span style="font-size:10px;color:var(--fg3);padding:2px 6px">...and ${items.length-10} more</span>`;
+        h+=`</div>`;
+      }
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  });
+  document.getElementById('metadataGroupResults').innerHTML=h||'<div class="card" style="text-align:center;color:var(--fg3);padding:32px">No evidence loaded yet.</div>';
+}
+
+// ===== V4.0: AI VISION =====
+let _aiProviders={};
+
+async function loadAiTargets(){
+  const r=await fetch('/api/evidence?per_page=500').then(r=>r.json());
+  ['aiTarget','aiResultsTarget'].forEach(selId=>{
+    const sel=document.getElementById(selId);
+    if(!sel)return;
+    sel.innerHTML='<option value="">Select evidence...</option>';
+    (r.items||[]).forEach(e=>{
+      const dur=e.duration?` (${Math.floor(e.duration/60)}:${String(Math.floor(e.duration%60)).padStart(2,'0')})`:''
+      sel.innerHTML+=`<option value="${e.id}">${e.file_name}${dur} [${e.frames_extracted||0} frames]</option>`;
+    });
+  });
+}
+
+async function loadAiSettings(){
+  try{
+    _aiProviders=await fetch('/api/ai/providers').then(r=>r.json());
+    const s=await fetch('/api/ai/settings').then(r=>r.json());
+    document.getElementById('aiProvider').value=s.provider||'anthropic';
+    onProviderChange(s.model);
+    if(s.api_key_masked)document.getElementById('aiApiKey').value=s.api_key_masked;
+    document.getElementById('aiPrompt').value=s.default_prompt||'';
+    document.getElementById('aiCustomEndpoint').value=s.custom_endpoint||'';
+    document.getElementById('aiTotalTokens').textContent=(s.total_tokens||0).toLocaleString();
+    document.getElementById('aiTotalCost').textContent='$'+(s.total_cost||0).toFixed(4);
+    document.getElementById('aiCurrentProvider').textContent=(_aiProviders[s.provider]||{}).name||s.provider||'--';
+    document.getElementById('aiCustomEndpointWrap').style.display=s.provider==='custom'?'block':'none';
+  }catch(e){console.error('AI settings load error:',e);}
+}
+
+function onProviderChange(selectedModel){
+  const provider=document.getElementById('aiProvider').value;
+  const modelSel=document.getElementById('aiModel');
+  const provInfo=_aiProviders[provider]||{};
+  modelSel.innerHTML='';
+  (provInfo.models||[]).forEach(m=>{
+    modelSel.innerHTML+=`<option value="${m.id}">${m.name} ($${m.input_cost}/$${m.output_cost} per 1M tok)</option>`;
+  });
+  if(selectedModel)modelSel.value=selectedModel;
+  document.getElementById('aiCustomEndpointWrap').style.display=provider==='custom'?'block':'none';
+}
+
+async function saveAiSettings(){
+  const keyInput=document.getElementById('aiApiKey').value;
+  const data={
+    provider:document.getElementById('aiProvider').value,
+    model:document.getElementById('aiModel').value,
+    default_prompt:document.getElementById('aiPrompt').value,
+    custom_endpoint:document.getElementById('aiCustomEndpoint').value
+  };
+  // Only send key if it was changed (not masked)
+  if(keyInput&&!keyInput.startsWith('*'))data.api_key=keyInput;
+  await fetch('/api/ai/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  toast('AI settings saved','success');
+  loadAiSettings();
+}
+
+async function testAiConnection(){
+  document.getElementById('aiTestResult').innerHTML='<span style="color:var(--fg2)">Testing connection...</span>';
+  try{
+    const r=await fetch('/api/ai/test',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
+    if(r.ok){
+      document.getElementById('aiTestResult').innerHTML=`<span style="color:var(--green)">&#10003; ${r.message||'Connection successful!'}</span>`;
+    }else{
+      document.getElementById('aiTestResult').innerHTML=`<span style="color:var(--red)">&#10007; ${r.error||'Connection failed'}</span>`;
+    }
+  }catch(e){
+    document.getElementById('aiTestResult').innerHTML=`<span style="color:var(--red)">&#10007; ${e.message}</span>`;
+  }
+}
+
+async function aiEstimate(){
+  const eid=document.getElementById('aiTarget').value;
+  if(!eid){toast('Select an evidence item first','error');return;}
+  const r=await fetch(`/api/ai/estimate/${eid}`).then(r=>r.json());
+  if(r.error){
+    document.getElementById('aiEstimateResult').innerHTML=`<span style="color:var(--red)">${r.error}</span>`;
+    return;
+  }
+  document.getElementById('aiEstimateResult').innerHTML=`
+    <div class="card" style="background:var(--bg3);padding:12px 16px;margin:0">
+      <div style="display:flex;gap:24px;font-size:13px">
+        <div><b style="color:var(--fg2)">Frames:</b> <span style="font-family:var(--mono)">${r.frames||r.frame_count}</span></div>
+        <div><b style="color:var(--fg2)">Provider:</b> ${r.provider}</div>
+        <div><b style="color:var(--fg2)">Model:</b> <span style="font-family:var(--mono)">${r.model}</span></div>
+        <div><b style="color:var(--fg2)">Est. Cost:</b> <span style="color:var(--yellow);font-family:var(--mono);font-weight:600">${r.cost_human||r.cost_display||'$'+r.estimated_cost}</span></div>
+      </div>
+    </div>`;
+}
+
+async function aiAnalyze(){
+  const eid=document.getElementById('aiTarget').value;
+  if(!eid){toast('Select an evidence item first','error');return;}
+  if(!confirm('This will send frames to the AI provider and incur API costs. Continue?'))return;
+  const prog=document.getElementById('aiProgress');
+  prog.classList.add('active');
+  document.getElementById('aiBar').style.width='10%';
+  document.getElementById('aiBarText').textContent='Starting...';
+  document.getElementById('aiStatus').textContent='Sending frames to AI provider...';
+  try{
+    const r=await fetch(`/api/ai/analyze/${eid}`,{method:'POST'}).then(r=>r.json());
+    document.getElementById('aiBar').style.width='100%';
+    document.getElementById('aiBarText').textContent='Done';
+    if(r.error){
+      document.getElementById('aiStatus').textContent=r.error;
+      toast(r.error,'error');
+      return;
+    }
+    document.getElementById('aiStatus').textContent=`Analyzed ${r.frames_analyzed} frames | ${r.total_tokens} tokens | $${r.total_cost.toFixed(4)}`;
+    // Render results
+    let h='';
+    (r.results||[]).forEach(fr=>{
+      h+=`<div class="card"><h3 style="font-size:14px">Frame ${fr.frame_index||fr.frame||0}</h3>`;
+      if(fr.frame_path)h+=`<img src="/frames/${fr.frame_path}" style="max-width:300px;border-radius:6px;margin-bottom:10px;border:1px solid var(--border)">`;
+      if(fr.error){
+        h+=`<div style="color:var(--red);font-size:13px">${fr.error}</div>`;
+      } else {
+        const res=fr.result||{};
+        h+=renderAiResult(res);
+      }
+      h+='</div>';
+    });
+    document.getElementById('aiResults').innerHTML=h;
+    toast(`AI analysis complete: ${r.frames_analyzed} frames, $${r.total_cost.toFixed(4)}`,'success');
+    loadAiSettings(); // refresh cost tracking
+  }catch(e){
+    document.getElementById('aiStatus').textContent='Error: '+e.message;
+    toast('AI analysis failed: '+e.message,'error');
+  }
+}
+
+function renderAiResult(res){
+  if(res.raw_text)return`<pre style="font-size:12px;color:var(--fg2);white-space:pre-wrap;font-family:var(--mono);background:var(--bg1);padding:12px;border-radius:6px;max-height:300px;overflow-y:auto">${res.raw_text}</pre>`;
+  let h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  const fields=[
+    {key:'outlet_type',label:'Power Outlet',icon:'&#128268;'},
+    {key:'region_estimate',label:'Region Estimate',icon:'&#127758;'},
+    {key:'lighting',label:'Lighting',icon:'&#128161;'},
+    {key:'text_language',label:'Text Language',icon:'&#127760;'},
+    {key:'confidence',label:'Confidence',icon:'&#127919;'}
+  ];
+  fields.forEach(f=>{
+    if(res[f.key]!==undefined&&res[f.key]!=='none'&&res[f.key]!==''){
+      const val=typeof res[f.key]==='number'?res[f.key]+'%':res[f.key];
+      h+=`<div style="background:var(--bg1);padding:8px 12px;border-radius:6px;font-size:12px">
+        <div style="color:var(--fg3);font-size:10px;text-transform:uppercase;margin-bottom:2px">${f.icon} ${f.label}</div>
+        <div style="color:var(--fg);font-family:var(--mono)">${val}</div>
+      </div>`;
+    }
+  });
+  h+='</div>';
+  // Arrays
+  const arrFields=[
+    {key:'visible_text',label:'Visible Text'},
+    {key:'objects',label:'Objects'},
+    {key:'environmental_clues',label:'Environmental Clues'}
+  ];
+  arrFields.forEach(f=>{
+    const val=res[f.key];
+    if(!val)return;
+    const items=Array.isArray(val)?val:[val];
+    if(items.length===0||items[0]==='')return;
+    h+=`<div style="margin-top:8px"><div style="color:var(--fg3);font-size:10px;text-transform:uppercase;margin-bottom:4px">${f.label}</div>`;
+    items.forEach(item=>{
+      h+=`<span class="tag" style="background:var(--bg4);color:var(--fg2);margin:2px">${item}</span>`;
+    });
+    h+='</div>';
+  });
+  // Text fields
+  ['room_features','vegetation'].forEach(key=>{
+    if(res[key]&&res[key]!=='none'&&res[key]!==''){
+      h+=`<div style="margin-top:8px;font-size:12px"><b style="color:var(--fg3)">${key.replace('_',' ')}:</b> <span style="color:var(--fg2)">${res[key]}</span></div>`;
+    }
+  });
+  return h;
+}
+
+async function loadAiResults(){
+  const eid=document.getElementById('aiResultsTarget').value;
+  if(!eid){toast('Select an evidence item first','error');return;}
+  const r=await fetch(`/api/ai/results/${eid}`).then(r=>r.json());
+  let h='';
+  if(!r.length){
+    h='<p style="color:var(--fg3);text-align:center;padding:12px">No AI results for this evidence. Run AI analysis first.</p>';
+  } else {
+    r.forEach(row=>{
+      h+=`<div class="card"><h3 style="font-size:14px">Frame ${row.frame_index} <span style="font-size:11px;color:var(--fg3);font-weight:400">| ${row.provider}/${row.model} | ${row.tokens_used} tok | $${(row.cost_estimate||0).toFixed(4)}</span></h3>`;
+      h+=renderAiResult(row.result_json||{});
+      h+='</div>';
+    });
+  }
+  document.getElementById('aiStoredResults').innerHTML=h;
 }
 
 async function checkDeps(){const r=await fetch('/api/info').then(r=>r.json());alert(`Palimpsest v${r.version}\n\nPillow (image EXIF): ${r.pil?'OK':'MISSING'}\nimagehash (perceptual hashing): ${r.imagehash?'OK':'MISSING'}\nOpenCV (video analysis): ${r.cv2?'OK':'MISSING'}\nhachoir (video containers): ${r.hachoir?'OK':'MISSING'}\nnumpy (forensics): ${r.numpy?'OK':'MISSING'}\nscipy (audio analysis): ${r.scipy?'OK':'MISSING'}\nffmpeg (audio extraction): ${r.ffmpeg?'OK':'NOT FOUND'}\nreportlab (PDF export): ${r.reportlab?'OK':'MISSING'}`);}
