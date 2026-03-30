@@ -22,6 +22,22 @@ The Cat still supervised.
 
 ---
 
+## ✦ What's New in v4.0
+
+**ENF Analysis** ⚡
+
+> Your power grid snitches on you. Every AC grid in the world runs at either 50Hz (Europe, Asia, Africa, Oceania) or 60Hz (Americas, parts of East Asia), and that frequency gets embedded in every recording made near a power source. Through electromagnetic interference in audio and flicker in indoor lighting. You can strip every byte of metadata and ENF still tells me what continent you're on. Court-accepted forensic science. Welcome to physics being on our side for once.
+
+**AI Vision Analysis** 🧠
+
+> Send extracted frames to Claude, GPT, Gemini, or whatever model you want. It identifies power outlet types (narrows your country real fast when you're using Type I plugs and claiming you're in Kansas), visible text and what language it's in, room features, vegetation through windows, lighting fixtures. Shows cost estimate before running because surprise API bills are their own kind of violence. Supports Anthropic, OpenAI, Google, OpenRouter, and custom endpoints.
+
+**Metadata Groups** 📊
+
+> Maps the distribution pipeline. Groups all your evidence by comment field, encoder, codec+resolution+fps, and file size. Same comment on 701 files? Same encoder? Same exact chain? Congratulations, you just fingerprinted whoever processed the batch. Who recorded, who re-encoded, who distributed. The pipeline has seams and this finds them.
+
+---
+
 ## ✦ Features
 
 **File Analyzer**
@@ -38,7 +54,7 @@ The Cat still supervised.
 
 **Forensic Suite**
 
-> Six analysis modules that go deeper than basic metadata:
+> Eight analysis modules that go deeper than basic metadata:
 >
 > → **Scene Analysis**: Color/brightness/texture fingerprinting. Finds videos filmed in the same room.
 > → **Watermark Detection**: Finds channel stamps, bot overlays, and redistribution marks. Reveals the sharing chain.
@@ -46,6 +62,8 @@ The Cat still supervised.
 > → **Screen Recording Detection**: Identifies Telegram screen grabs vs original camera captures. Checks for status bars, nav bars, phone resolutions.
 > → **Lighting Analysis**: Natural vs artificial, color temperature, brightness patterns over time.
 > → **Audio Fingerprinting**: Spectral analysis and energy profiling. Matches videos by ambient sound. Same room = same background noise.
+> → **ENF Extraction**: Power grid frequency from audio (STFT bandpass) and video luminance (FFT). 50Hz or 60Hz. Geography from physics.
+> → **AI Vision**: Frame-by-frame analysis via vision models. Outlet types, text, objects, regional clues.
 
 **Scene Matching**
 
@@ -55,13 +73,25 @@ The Cat still supervised.
 
 > Cross-references audio fingerprints. Same ambient hum, same background noise profile. Connects videos to the same physical location through sound.
 
+**ENF Matching**
+
+> Cross-references ENF traces. Same grid frequency, same fluctuation pattern? Recorded on the same power grid. Maybe at the same time. The grid doesn't care about your VPN.
+
+**AI Vision Analysis**
+
+> Pick an evidence item, see the cost estimate, click go. Each extracted frame gets sent to your configured AI provider with a forensic prompt. Results come back structured: outlet type, visible text, language, room features, lighting, objects, vegetation, region estimate, confidence score. Stored per-frame, viewable anytime.
+
+**Metadata Groups**
+
+> Four grouping modes: comment field (same recording tool), encoder (same encoding software), codec+resolution+fps chain (same batch processing), file size range (same parameters). Reveals the production and distribution pipeline behind a content network.
+
 **Multi-Algorithm Hashing**
 
 > MD5, SHA-256 (exact identity), pHash, dHash, wHash, aHash (visual fingerprints). Perceptual hashes survive re-encoding, cropping, and compression. Track the same content across platforms even after re-upload.
 
 **Batch Processing**
 
-> Got a folder of 200 files from a Telegram dump? Drop them all in. Each one gets fully analyzed, hashed, thumbnailed, and frame-extracted. Link them all to a suspect at once.
+> Got a folder of 700 files from an IPFS dump? Drop them all in. Each one gets fully analyzed, hashed, thumbnailed, and frame-extracted. Link them all to a suspect at once. BG_SEMAPHORE keeps it from spawning 700 ffmpeg processes and turning your machine into a space heater.
 
 **Suspect Management**
 
@@ -101,7 +131,7 @@ The Cat still supervised.
 
 > 15-step walkthrough that takes you through the entire app. Also a full Help page with written docs.
 
-**61 Tooltips**
+**61+ Tooltips**
 
 > Hover over basically anything for an explanation. Designed to be usable by people who have never touched forensic software before.
 
@@ -109,9 +139,9 @@ The Cat still supervised.
 
 > It's your machine. Your rules.
 
-**2,730 Lines of Code**
+**4,163 Lines of Code**
 
-> One developer. One cat. Pure Python. No external DLLs. A lot of anger at the right things.
+> One developer. One cat. Pure Python. No external DLLs. Even more anger at the right things.
 
 ---
 
@@ -119,50 +149,60 @@ The Cat still supervised.
 
 ### Option A: Download the .exe
 
-Go to [**Releases**](../../releases), download the zip, extract, double-click `Palimpsest.exe`. Done.
+Go to [**Releases**](https://github.com/ephemera02/Palimpsest/releases), download the zip, extract, double-click `Palimpsest.exe`. Done.
 
 The exe bundles everything including ffmpeg. Nothing else to install. Three files total: `Palimpsest.exe`, `palimpsest_ui.html`, `palimpsest_icon.ico`.
 
 ### Option B: Run from Source
 
 1. Install Python 3.10+ from [python.org](https://python.org)
-   * ⚠️ **CHECK "Add Python to PATH"** during install.
+
+   * ⚠️ **CHECK "Add Python to PATH"** during install. I will not troubleshoot this for you.
+
 2. Install dependencies:
 
    ```
    pip install -r requirements.txt
    ```
-3. Install ffmpeg from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH (needed for audio forensics)
+
+3. Install ffmpeg from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH (needed for audio forensics and ENF analysis)
+
 4. Run it:
 
    ```
    python palimpsest.py
    ```
+
 5. Opens in your browser at `http://127.0.0.1:7700`
 
 ### Option C: Build the .exe Yourself
 
 1. Do Option B first to make sure it works
+
 2. Run the build script:
 
    ```
    build.bat
    ```
+
 3. Your exe lands in `dist/`. Copy `palimpsest_ui.html` and `palimpsest_icon.ico` next to it.
 
 Note: `pyinstaller` might not be on your PATH. If `build.bat` fails, use the full path:
+
 ```
 & "C:\Users\YOU\AppData\Roaming\Python\PythonXXX\Scripts\pyinstaller.exe" ...
 ```
+
+PowerShell users: yes you need the `&` prefix. No I will not explain why. Blame Microsoft.
 
 ---
 
 ## 📁 Project Structure
 
 | File | What It Does |
-| --- | --- |
-| `palimpsest.py` | The whole backend. Flask API, metadata extraction, forensic modules, database. 1,747 lines. |
-| `palimpsest_ui.html` | The whole frontend. Single-page app with 59 functions. 983 lines. |
+|------|------|
+| `palimpsest.py` | The whole backend. Flask API, metadata extraction, forensic modules, ENF analysis, AI integration, database. 2,614 lines. |
+| `palimpsest_ui.html` | The whole frontend. Single-page app with 70+ functions. 1,560 lines. |
 | `palimpsest_icon.ico` | App icon. Browser tab, sidebar, taskbar, file explorer. |
 | `requirements.txt` | Python dependencies. All pip-installable. |
 | `build.bat` | One-click Windows exe builder. Bundles ffmpeg. |
@@ -175,17 +215,17 @@ Note: `pyinstaller` might not be on your PATH. If `build.bat` fails, use the ful
 All pip-installable. No external DLLs.
 
 | Package | What It Does |
-| --- | --- |
+|---------|------|
 | Flask | Runs the local web UI |
 | Pillow | Image EXIF extraction |
 | imagehash | Perceptual hashing (pHash, dHash, wHash, aHash) |
 | opencv-python-headless | Video analysis, frame extraction, thumbnails, forensic vision |
 | hachoir | Video container metadata (creation dates, codecs, encoder info) |
 | numpy | Numerical processing for forensic analysis |
-| scipy | Audio spectral analysis and signal processing |
+| scipy | Audio spectral analysis, signal processing, ENF extraction |
 | reportlab | PDF report generation |
 
-Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.html)) for audio extraction and video transcoding. Bundled into the exe automatically by `build.bat`.
+Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.html)) for audio extraction, video transcoding, and ENF analysis. Bundled into the exe automatically by `build.bat`.
 
 ---
 
@@ -215,6 +255,14 @@ Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.
 
 > Extracts audio via ffmpeg, normalizes to 16kHz mono. Computes spectral centroid, per-second energy profile, silence percentage. Generates a hash from the energy profile. Audio Matching then finds videos with the same ambient sound signature.
 
+**ENF Extraction**
+
+> Extracts audio at 8kHz, runs Short-Time Fourier Transform to isolate energy around 50Hz and 60Hz plus their 2nd harmonics at 100Hz and 120Hz. Computes signal-to-noise ratios against the noise floor between those frequencies. For high-framerate video (50+ fps), also extracts luminance FFT to detect AC lighting flicker as corroboration. Outputs: detected frequency, grid region classification, confidence percentage, source (audio, video, or both), and an ENF trace showing frequency fluctuations over time. The power grid is the world's largest unintentional tracking device.
+
+**AI Vision Frame Analysis**
+
+> Reads each extracted frame via a vision model API. Provider abstraction layer supports Anthropic (Claude Sonnet/Opus 4.5-4.6), OpenAI (GPT 5.2-5.3), Google (Gemini 3.0-3.1 Flash/Pro), OpenRouter, and custom OpenAI-compatible endpoints. Returns structured JSON: outlet type, visible text, text language, room features, lighting type, vegetation, objects, environmental clues, region estimate, confidence score. Shows cost estimate before running. Tracks cumulative spend. Your API key stays local.
+
 ---
 
 ## ⚠️ Disclaimers
@@ -225,7 +273,7 @@ Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.
 
 **Forensic Accuracy**
 
-> The forensic modules use heuristics. Scene matching, screen recording detection, and encoding analysis are probabilistic, not definitive. They flag connections worth investigating. They don't prove anything on their own.
+> The forensic modules use heuristics. Scene matching, screen recording detection, encoding analysis, and ENF classification are probabilistic, not definitive. They flag connections worth investigating. They don't prove anything on their own. ENF is court-accepted science but confidence levels vary with recording quality.
 
 **No Warranty**
 
@@ -233,7 +281,7 @@ Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.
 
 **Privacy**
 
-> Palimpsest collects nothing. No telemetry, no analytics, no tracking. Everything stays on your machine. Nothing phones home.
+> Palimpsest collects nothing. No telemetry, no analytics, no tracking. Everything stays on your machine. Nothing phones home. The only exception: if you use AI Vision analysis, extracted frames are sent to whichever AI provider you configured. Your API key is stored locally and only transmitted to the endpoint you chose. No frames leave your machine without you explicitly clicking "Run AI Analysis."
 
 ---
 
@@ -254,6 +302,14 @@ Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.
 **"Can my team share data?"**
 
 > Yes. Export as JSON from one Palimpsest, import into another. Suspects come along for the ride. Duplicates are auto-skipped by SHA-256. CSV and HTML exports work for people who don't have Palimpsest at all.
+
+**"The ENF says indeterminate"**
+
+> The recording was probably made on battery power away from the grid, or outdoors, or the audio is too noisy for a clean signal. ENF needs electromagnetic interference from nearby power lines or indoor lighting flicker to work. It's physics, not magic. Close though.
+
+**"The AI Vision analysis is expensive"**
+
+> That's why there's a cost estimator. Click "Estimate Cost" before running. At 360p with 8 frames per video, most providers run $0.02-0.08 per video. Gemini Flash is cheapest. For 700 videos that's $14-56 total. You can also just run it on the interesting ones.
 
 **"The forensics say 'screen recording detected' but it's not"**
 
@@ -279,9 +335,9 @@ Plus **ffmpeg** (separate install from [ffmpeg.org](https://ffmpeg.org/download.
 
 **Created by Eph at Ephemera**
 
-Built with the assistance of Claude (Anthropic), who ran the forensic math and didn't flinch at the subject matter.
+Built with the assistance of Claude (Anthropic), who ran the forensic math, built the ENF extraction pipeline, and still didn't flinch at the subject matter.
 
-Mascot: The Cat, who remains unbothered.
+Mascot: The Cat, who remains unbothered by your power grid frequency.
 
 ---
 
@@ -293,6 +349,6 @@ Use it. Modify it. Build on it. If it helps take down even one of these networks
 
 ---
 
-*"She believed she could build a forensic toolkit and she actually did."*
+*"She taught the power grid to snitch and honestly? Iconic."*
 
 🐾
